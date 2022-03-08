@@ -405,6 +405,7 @@ class AverageMeter(object):
         self.avg = self.sum / self.count
 
 
+
 def cyclic_adjust_precision(args, _iter, cyclic_period):
     if args.is_cyclic_precision:
         assert len(args.cyclic_num_bits_schedule) == 2
@@ -416,12 +417,19 @@ def cyclic_adjust_precision(args, _iter, cyclic_period):
         num_grad_bit_min = args.cyclic_num_grad_bits_schedule[0]
         num_grad_bit_max = args.cyclic_num_grad_bits_schedule[1]
 
-        args.num_bits = np.rint(num_bit_min +
-                                0.5 * (num_bit_max - num_bit_min) *
-                                (1 + np.cos(np.pi * ((_iter % cyclic_period) / cyclic_period) + np.pi)))
-        args.num_grad_bits = np.rint(num_grad_bit_min +
-                                     0.5 * (num_grad_bit_max - num_grad_bit_min) *
-                                     (1 + np.cos(np.pi * ((_iter % cyclic_period) / cyclic_period) + np.pi)))
+        if args.precision_schedule == 'CPT':
+            #args.num_bits = np.rint(num_bit_min +
+            #                        0.5 * (num_bit_max - num_bit_min) *
+            #                        (1 + np.cos(np.pi * ((_iter % cyclic_period) / cyclic_period) + np.pi)))
+            #args.num_grad_bits = np.rint(num_grad_bit_min +
+            #                             0.5 * (num_grad_bit_max - num_grad_bit_min) *
+            #                             (1 + np.cos(np.pi * ((_iter % cyclic_period) / cyclic_period) + np.pi)))
+            args.num_bits = calc_cpt_bits(cyclic_period, _iter, num_bit_min, num_bit_max)
+            args.num_grad_bits = np.rint(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max)
+        elif args.precision_schedule == 'DEMON':
+            args.num_bits = calc_demon_bits(cyclic_period, _iter, num_bit_min, num_bit_max)
+            args.num_grad_bits = calc_demon_bits(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max)
+        elif args.precision_schedule == 'LINEAR_DECAY':
 
         if _iter % args.eval_every == 0:
             logging.info('Iter [{}] num_bits = {} num_grad_bits = {} cyclic precision'.format(_iter, args.num_bits,
