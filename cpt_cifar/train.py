@@ -16,6 +16,16 @@ import models
 from modules.data import *
 
 import util_swa
+from quant_scheds import (
+    calc_cos_decay,
+    calc_cos_growth,
+    calc_demon_decay,
+    calc_demon_growth,
+    calc_exp_decay,
+    calc_exp_growth,
+    calc_linear_decay,
+    calc_linear_growth,
+)
 
 model_names = sorted(name for name in models.__dict__
                      if name.islower() and not name.startswith('__')
@@ -417,20 +427,38 @@ def cyclic_adjust_precision(args, _iter, cyclic_period):
         num_grad_bit_min = args.cyclic_num_grad_bits_schedule[0]
         num_grad_bit_max = args.cyclic_num_grad_bits_schedule[1]
 
-        if args.precision_schedule == 'CPT':
+        if args.precision_schedule == 'cos_decay':
             #args.num_bits = np.rint(num_bit_min +
             #                        0.5 * (num_bit_max - num_bit_min) *
             #                        (1 + np.cos(np.pi * ((_iter % cyclic_period) / cyclic_period) + np.pi)))
             #args.num_grad_bits = np.rint(num_grad_bit_min +
             #                             0.5 * (num_grad_bit_max - num_grad_bit_min) *
             #                             (1 + np.cos(np.pi * ((_iter % cyclic_period) / cyclic_period) + np.pi)))
-            args.num_bits = calc_cpt_bits(cyclic_period, _iter, num_bit_min, num_bit_max)
-            args.num_grad_bits = np.rint(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max)
-        elif args.precision_schedule == 'DEMON':
-            args.num_bits = calc_demon_bits(cyclic_period, _iter, num_bit_min, num_bit_max)
-            args.num_grad_bits = calc_demon_bits(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max)
-        elif args.precision_schedule == 'LINEAR_DECAY':
-
+            args.num_bits = calc_cos_decay(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+            args.num_grad_bits = calc_cos_decay(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+        elif args.precision_schedule == 'cos_growth':
+            args.num_bits = calc_cos_growth(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+            args.num_grad_bits = calc_cos_growth(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+        elif args.precision_schedule == 'demon_decay':
+            args.num_bits = calc_demon_decay(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+            args.num_grad_bits = calc_demon_decay(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+        elif args.precision_schedule == 'demon_growth':
+            args.num_bits = calc_demon_growth(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+            args.num_grad_bits = calc_demon_growth(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+        elif args.precision_schedule == 'exp_decay':
+            args.num_bits = calc_exp_decay(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+            args.num_grad_bits = calc_exp_decay(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+        elif args.precision_schedule == 'exp_growth':
+            args.num_bits = calc_exp_growth(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+            args.num_grad_bits = calc_exp_growth(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+        elif args.precision_schedule == 'linear_decay':
+            args.num_bits = calc_linear_decay(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+            args.num_grad_bits = calc_linear_decay(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+        elif args.precision_schedule == 'linear_growth':
+            args.num_bits = calc_linear_growth(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+            args.num_grad_bits = calc_linear_growth(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+        else:
+            raise NotImplementedError(f'{args.precision_schedule} is not a supported precision schedule.')
         if _iter % args.eval_every == 0:
             logging.info('Iter [{}] num_bits = {} num_grad_bits = {} cyclic precision'.format(_iter, args.num_bits,
                                                                                                   args.num_grad_bits))
@@ -463,6 +491,9 @@ def adjust_learning_rate(args, optimizer, _iter):
         lr_min = args.lr * (args.step_ratio ** 2)
         lr_max = args.lr
         lr = lr_min + 1 / 2 * (lr_max - lr_min) * (1 + np.cos(_iter / args.iters * 3.141592653))
+
+    else:
+        raise NotImplementedError(f'{args.lr_schedule} is not a supported lr schedule.')
 
     if _iter % args.eval_every == 0:
         logging.info('Iter [{}] learning rate = {}'.format(_iter, lr))
