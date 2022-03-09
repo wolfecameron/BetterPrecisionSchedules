@@ -85,13 +85,14 @@ def parse_args():
                         help='num bits for weight and activation')
     parser.add_argument('--num_grad_bits', default=0, type=int,
                         help='num bits for gradient')
-    parser.add_argument('--num_bits_schedule', default=None, type=int, nargs='*',
-                        help='schedule for weight/act precision')
-    parser.add_argument('--num_grad_bits_schedule', default=None, type=int, nargs='*',
-                        help='schedule for grad precision')
+    #parser.add_argument('--num_bits_schedule', default=None, type=int, nargs='*',
+    #                    help='schedule for weight/act precision')
+    #parser.add_argument('--num_grad_bits_schedule', default=None, type=int, nargs='*',
+    #                    help='schedule for grad precision')
 
     parser.add_argument('--is_cyclic_precision', action='store_true',
                         help='cyclic precision schedule')
+    parser.add_argument('--precision_schedule', default='cos_growth', type=str)
     parser.add_argument('--cyclic_num_bits_schedule', default=None, type=int, nargs='*',
                         help='cyclic schedule for weight/act precision')
     parser.add_argument('--cyclic_num_grad_bits_schedule', default=None, type=int, nargs='*',
@@ -133,8 +134,9 @@ def main():
 
 def run_training(args):
     # create model
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = models.__dict__[args.arch](args.pretrained)
-    model = torch.nn.DataParallel(model).cuda()
+    model = model.to(device)
 
     if args.swa_start is not None:
         print('SWA training')
@@ -187,6 +189,7 @@ def run_training(args):
                                     batch_size=args.batch_size,
                                     shuffle=False,
                                     num_workers=args.workers)
+
     if args.swa_start is not None:
         swa_loader = prepare_train_data(dataset=args.dataset,
                                         datadir=args.datadir,
@@ -194,7 +197,7 @@ def run_training(args):
                                         shuffle=False,
                                         num_workers=args.workers)
 
-    criterion = nn.CrossEntropyLoss().cuda()
+    criterion = nn.CrossEntropyLoss()
 
     optimizer = torch.optim.SGD(model.parameters(), args.lr,
                                 momentum=args.momentum,
@@ -227,9 +230,9 @@ def run_training(args):
             eb_cost = args.num_bits * args.num_grad_bits / 32 / 32
             gc_cost = eb_cost
             cr.update((fw_cost + eb_cost + gc_cost) / 3)
-            target = target.squeeze().long().cuda()
-            input_var = Variable(input).cuda()
-            target_var = Variable(target).cuda()
+            target = target.squeeze().long().to(device)
+            input_var = Variable(input).to(device)
+            target_var = Variable(target).to(device)
 
             # compute output
             output = model(input_var, args.num_bits, args.num_grad_bits)
@@ -303,9 +306,9 @@ def run_training(args):
                     'arch': args.arch,
                     'state_dict': model.state_dict(),
                     'best_prec1': best_prec1,
-                    'swa_state_dict': swa_model.state_dict() if args.swa_start is not None else None,
-                    'swa_n': swa_n if args.swa_start is not None else None,
-                    'best_swa_prec': best_swa_prec if args.swa_start is not None else None,
+                    #'swa_state_dict': swa_model.state_dict() if args.swa_start is not None else None,
+                    #'swa_n': swa_n if args.swa_start is not None else None,
+                    #'best_swa_prec': best_swa_prec if args.swa_start is not None else None,
                 },
                     is_best, filename=checkpoint_path)
                 shutil.copyfile(checkpoint_path, os.path.join(args.save_path,
@@ -320,14 +323,15 @@ def validate(args, test_loader, model, criterion, step, swa=False):
     batch_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # switch to evaluation mode
     model.eval()
     end = time.time()
     for i, (input, target) in enumerate(test_loader):
-        target = target.squeeze().long().cuda()
-        input_var = Variable(input, volatile=True).cuda()
-        target_var = Variable(target, volatile=True).cuda()
+        target = target.squeeze().long().to(device)
+        input_var = Variable(input, volatile=True).to(device)
+        target_var = Variable(target, volatile=True).to(device)
 
         # compute output
         output = model(input_var, args.num_bits, args.num_grad_bits)
