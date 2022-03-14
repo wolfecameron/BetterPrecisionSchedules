@@ -226,6 +226,9 @@ def run_training(args):
 
             i += 1
 
+            # use FLOPS * (bit / 32)^2 to compute effective FLOPS (proportional to # bit-opts)
+            # here, we seem to exclude FLOPS because it is constant
+            # calculate both backward + forward pass cost, backward is 2x cost of forward (included twice in sum)
             fw_cost = args.num_bits * args.num_bits / 32 / 32
             eb_cost = args.num_bits * args.num_grad_bits / 32 / 32
             gc_cost = eb_cost
@@ -289,33 +292,41 @@ def run_training(args):
             if (i % args.eval_every == 0 and i > 0) or (i == args.iters):
                 with torch.no_grad():
                     prec1 = validate(args, test_loader, model, criterion, i)
-
+                
                 is_best = prec1 > best_prec1
                 if is_best:
                     best_prec1 = prec1
                     best_iter = i
-
+                    
+                    #checkpoint_path = os.path.join(args.save_path, 'results.pth')
+                    save_checkpoint = {
+                        'iter': i,
+                        'arch': args.arch,
+                        'state_dict': model.state_dict(),
+                        'best_prec1': best_prec1,
+                        'train_mets': (losses.avg, top1.avg, cr.avg, cr.val)
+                        #'swa_state_dict': swa_model.state_dict() if args.swa_start is not None else None,
+                        #'swa_n': swa_n if args.swa_start is not None else None,
+                        #'best_swa_prec': best_swa_prec if args.swa_start is not None else None,
+                    }
+                    #shutil.copyfile(checkpoint_path, os.path.join(args.save_path,
+                    #                                              'checkpoint_latest'
+                    #                                              '.pth.tar'))
+                    torch.save(save_checkpoint, os.path.join(args.save_path, 'best_results.pth'))
+                
                 print("Current Best Prec@1: ", best_prec1)
                 print("Current Best Iteration: ", best_iter)
                 print("Current cr val: {}, cr avg: {}".format(cr.val, cr.avg))
 
-
-                checkpoint_path = os.path.join(args.save_path, 'checkpoint_{:05d}_{:.2f}.pth.tar'.format(i, prec1))
-                save_checkpoint({
-                    'iter': i,
-                    'arch': args.arch,
-                    'state_dict': model.state_dict(),
-                    'best_prec1': best_prec1,
-                    #'swa_state_dict': swa_model.state_dict() if args.swa_start is not None else None,
-                    #'swa_n': swa_n if args.swa_start is not None else None,
-                    #'best_swa_prec': best_swa_prec if args.swa_start is not None else None,
-                },
-                    is_best, filename=checkpoint_path)
-                shutil.copyfile(checkpoint_path, os.path.join(args.save_path,
-                                                              'checkpoint_latest'
-                                                              '.pth.tar'))
-
                 if i == args.iters:
+                    save_checkpoint = {
+                        'iter': i,
+                        'arch': args.arch,
+                        'state_dict': model.state_dict(),
+                        'best_prec1': best_prec1,
+                        'train_mets': (losses.avg, top1.avg, cr.avg, cr.val)
+                    }
+                    torch.save(save_checkpoint, os.path.join(args.save_path, 'final_results.pth'))
                     break
 
 
@@ -438,8 +449,12 @@ def cyclic_adjust_precision(args, _iter, cyclic_period):
             #args.num_grad_bits = np.rint(num_grad_bit_min +
             #                             0.5 * (num_grad_bit_max - num_grad_bit_min) *
             #                             (1 + np.cos(np.pi * ((_iter % cyclic_period) / cyclic_period) + np.pi)))
-            args.num_bits = calc_cos_decay(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
-            args.num_grad_bits = calc_cos_decay(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+            if int(_iter / cyclic_period) >= args.num_cyclic_period - 1:
+                args.num_bits = calc_cos_growth(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+                args.num_grad_bits = calc_cos_growth(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+            else:
+                args.num_bits = calc_cos_decay(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+                args.num_grad_bits = calc_cos_decay(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
         elif args.precision_schedule == 'cos_growth':
             args.num_bits = calc_cos_growth(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
             args.num_grad_bits = calc_cos_growth(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
