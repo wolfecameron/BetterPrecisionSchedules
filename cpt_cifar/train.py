@@ -176,8 +176,6 @@ def run_training(args):
                 args.resume, checkpoint['iter']
             ))
         else:
-        re details and contact information at \url{https://cauribe.rice.edu/}.
-
             logging.info('=> no checkpoint found at `{}`'.format(args.resume))
 
     cudnn.benchmark = False

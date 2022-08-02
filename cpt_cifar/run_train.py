@@ -44,7 +44,7 @@ for ds in datasets:
                                 f'--batch_size {bs} --lr_schedule {lr_sched} --lr {lr} --weight_decay {wd} '
                                 f'--step_ratio {step_ratio}  --save_folder {save_dir} --eval_every {eval_every} '
                                 f'--is_cyclic_precision --num_cyclic_period {c} --precision_schedule {ps} '
-                                f'--cyclic_num_bits_schedule {num_bit} --cyclic_num_grad_bits_schedule {num_grad_bit} '
+                                f'--cyclic_num_bits_schedule {nb} --cyclic_num_grad_bits_schedule {num_grad_bit} '
                                 f'--flip-vertically ')
                         if warm_up:
                             command += ' --warm_up'
@@ -61,7 +61,7 @@ for ds in datasets:
                                 f'--batch_size {bs} --lr_schedule {lr_sched} --lr {lr} --weight_decay {wd} '
                                 f'--step_ratio {step_ratio}  --save_folder {save_dir} --eval_every {eval_every} '
                                 f'--is_cyclic_precision --num_cyclic_period {c} --precision_schedule {ps} '
-                                f'--cyclic_num_bits_schedule {num_bit} --cyclic_num_grad_bits_schedule {num_grad_bit} ')
+                                f'--cyclic_num_bits_schedule {nb} --cyclic_num_grad_bits_schedule {num_grad_bit} ')
                         if warm_up:
                             command += ' --warm_up'
                         if pretrained:
@@ -79,7 +79,7 @@ for ds in datasets:
                                 f'--batch_size {bs} --lr_schedule {lr_sched} --lr {lr} --weight_decay {wd} '
                                 f'--step_ratio {step_ratio}  --save_folder {save_dir} --eval_every {eval_every} '
                                 f'--is_cyclic_precision --num_cyclic_period {c} --precision_schedule {ps} '
-                                f'--cyclic_num_bits_schedule {num_bit} --cyclic_num_grad_bits_schedule {num_grad_bit} ')
+                                f'--cyclic_num_bits_schedule {nb} --cyclic_num_grad_bits_schedule {num_grad_bit} ')
                         if warm_up:
                             command += ' --warm_up'
                         if pretrained:
