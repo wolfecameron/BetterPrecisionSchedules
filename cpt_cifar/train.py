@@ -444,7 +444,12 @@ def cyclic_adjust_precision(args, _iter, cyclic_period):
         num_grad_bit_min = args.cyclic_num_grad_bits_schedule[0]
         num_grad_bit_max = args.cyclic_num_grad_bits_schedule[1]
 
-        if args.precision_schedule == 'cos_decay':
+        if args.precision_schedule == 'fixed':
+            assert num_bit_min == num_bit_max
+            assert num_grad_bit_min == num_grad_bit_max
+            args.num_bits = num_bit_min
+            args.num_grad_bits = num_grad_bit_min
+        elif args.precision_schedule == 'cos_decay':
             #args.num_bits = np.rint(num_bit_min +
             #                        0.5 * (num_bit_max - num_bit_min) *
             #                        (1 + np.cos(np.pi * ((_iter % cyclic_period) / cyclic_period) + np.pi)))
