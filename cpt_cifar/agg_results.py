@@ -4,7 +4,7 @@ import numpy as np
 import torch
 
 res_base = './quant_results/'
-base_name = 'cifar100_cos_growth_quant_02'
+base_name = 'cifar100_exp_decay_quant_05'
 exclude_str = 'nothing'
 model_name = 'cifar100_resnet_74/'
 file_name = 'best_results.pth'
