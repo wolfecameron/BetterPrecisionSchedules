@@ -103,6 +103,7 @@ def parse_args():
     parser.add_argument('--swa_start', type=float, default=None, help='SWA start step number')
     parser.add_argument('--swa_freq', type=float, default=1170,
                         help='SWA model collection frequency')
+    parser.add_argument('--flip-vertically', action='store_true', default=False)
     args = parser.parse_args()
     return args
 
@@ -175,6 +176,8 @@ def run_training(args):
                 args.resume, checkpoint['iter']
             ))
         else:
+        re details and contact information at \url{https://cauribe.rice.edu/}.
+
             logging.info('=> no checkpoint found at `{}`'.format(args.resume))
 
     cudnn.benchmark = False
@@ -449,7 +452,8 @@ def cyclic_adjust_precision(args, _iter, cyclic_period):
             #args.num_grad_bits = np.rint(num_grad_bit_min +
             #                             0.5 * (num_grad_bit_max - num_grad_bit_min) *
             #                             (1 + np.cos(np.pi * ((_iter % cyclic_period) / cyclic_period) + np.pi)))
-            if int(_iter / cyclic_period) >= args.num_cyclic_period - 1:
+            num_period = int(_iter / cyclic_period)
+            if (num_period % 2) == 1:
                 args.num_bits = calc_cos_growth(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
                 args.num_grad_bits = calc_cos_growth(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
             else:
@@ -459,20 +463,35 @@ def cyclic_adjust_precision(args, _iter, cyclic_period):
             args.num_bits = calc_cos_growth(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
             args.num_grad_bits = calc_cos_growth(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
         elif args.precision_schedule == 'demon_decay':
-            args.num_bits = calc_demon_decay(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
-            args.num_grad_bits = calc_demon_decay(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+            num_period = int(_iter / cyclic_period)
+            if (num_period % 2) == 1:
+                args.num_bits = calc_demon_growth(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+                args.num_grad_bits = calc_demon_growth(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+            else:
+                args.num_bits = calc_demon_decay(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True, flip_vertically=args.flip_vertically)
+                args.num_grad_bits = calc_demon_decay(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True, flip_vertically=args.flip_vertically)
         elif args.precision_schedule == 'demon_growth':
             args.num_bits = calc_demon_growth(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
             args.num_grad_bits = calc_demon_growth(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
         elif args.precision_schedule == 'exp_decay':
-            args.num_bits = calc_exp_decay(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
-            args.num_grad_bits = calc_exp_decay(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+            num_period = int(_iter / cyclic_period)
+            if (num_period % 2) == 1:
+                args.num_bits = calc_exp_growth(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+                args.num_grad_bits = calc_exp_growth(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+            else:
+                args.num_bits = calc_exp_decay(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True, flip_vertically=args.flip_vertically)
+                args.num_grad_bits = calc_exp_decay(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True, flip_vertically=args.flip_vertically)
         elif args.precision_schedule == 'exp_growth':
             args.num_bits = calc_exp_growth(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
             args.num_grad_bits = calc_exp_growth(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
         elif args.precision_schedule == 'linear_decay':
-            args.num_bits = calc_linear_decay(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
-            args.num_grad_bits = calc_linear_decay(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+            num_period = int(_iter / cyclic_period)
+            if (num_period % 2) == 1:
+                args.num_bits = calc_linear_growth(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+                args.num_grad_bits = calc_linear_growth(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+            else:
+                args.num_bits = calc_linear_decay(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+                args.num_grad_bits = calc_linear_decay(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
         elif args.precision_schedule == 'linear_growth':
             args.num_bits = calc_linear_growth(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
             args.num_grad_bits = calc_linear_growth(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
