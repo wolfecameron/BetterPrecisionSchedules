@@ -14,6 +14,7 @@ import logging
 
 import models
 from modules.data import *
+from fvcore.nn import FlopCountAnalysis
 
 import util_swa
 from quant_scheds import (

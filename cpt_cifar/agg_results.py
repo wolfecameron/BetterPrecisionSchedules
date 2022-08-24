@@ -4,9 +4,9 @@ import numpy as np
 import torch
 
 res_base = './quant_results/'
-base_name = 'cifar100_cifar100_resnet_74'
-exclude_str = 'nothing'
-model_name = 'cifar100_resnet_74/'
+base_name = 'cifar100_cifar100_resnet_152'
+exclude_str = 'max6'
+model_name = 'cifar100_resnet_152/'
 file_name = 'best_results.pth'
 
 all_path = [x for x in os.listdir(res_base) if base_name in x and not exclude_str in x]
