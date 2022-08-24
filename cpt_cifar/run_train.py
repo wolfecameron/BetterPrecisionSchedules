@@ -19,7 +19,7 @@ warm_up = False
 pretrained = False
 
 # quant
-num_bits = ['3 6']
+num_bits = ['3 8']
 num_grad_bit = '8 8'
 
 # stuff that changes
