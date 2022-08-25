@@ -4,11 +4,11 @@ import numpy as np
 import torch
 
 res_base = './quant_results/'
-base_name = 'cifar100_cifar100_resnet_152'
+base_name = 'cifar100_cos_growth'
 exclude_str = 'nothing'
-model_name = 'cifar10_resnet_74/'
+model_name = 'cifar100_resnet_74/'
 perf_file_name = 'best_results.pth'
-cost_file_name = 'final_results.pth'
+cost_file_name = 'best_results.pth'
 
 all_path = [x for x in os.listdir(res_base) if base_name in x and not exclude_str in x]
 all_path_grouped = {}
@@ -34,7 +34,7 @@ for k in sorted(list(all_path_grouped.keys())):
         acc_res = torch.load(os.path.join(fn, perf_file_name))
         all_res.append(acc_res['best_prec1'])
         cost_res = torch.load(os.path.join(fn, cost_file_name))
-        all_cost.append(cost_res['train_mets'][1])
+        all_cost.append(cost_res['train_mets'][2])
     all_res = np.array(all_res)
     all_cost = np.array(all_cost)
     print(f'\n{k} --> {np.mean(all_res):.2f} +- {np.std(all_res):.2f}, {np.mean(all_cost):.4f} +- {np.std(all_cost):.4f}')
