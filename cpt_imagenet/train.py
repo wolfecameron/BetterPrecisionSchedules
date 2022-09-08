@@ -16,6 +16,17 @@ import math
 import models
 from modules.data import *
 
+from quant_scheds import (
+    calc_cos_decay,
+    calc_cos_growth,
+    calc_demon_decay,
+    calc_demon_growth,
+    calc_exp_decay,
+    calc_exp_growth,
+    calc_linear_decay,
+    calc_linear_growth,
+)
+
 
 model_names = sorted(name for name in models.__dict__
                      if name.islower() and not name.startswith('__')
@@ -39,7 +50,7 @@ def parse_args():
                         help='dataset choice')
     parser.add_argument('--datadir', default='/home/yf22/dataset', type=str,
                         help='path to dataset')
-    parser.add_argument('--workers', default=32, type=int, metavar='N',
+    parser.add_argument('--workers', default=8, type=int, metavar='N',
                         help='number of data loading workers (default: 4 )')
     parser.add_argument('--epoch', default=120, type=int,
                         help='number of epochs (default: 90)')
@@ -76,10 +87,8 @@ def parse_args():
                         help='num bits for weight and activation')
     parser.add_argument('--num_grad_bits',default=0,type=int,
                         help='num bits for gradient')
-    parser.add_argument('--num_bits_schedule',default=None,type=int,nargs='*',
-                        help='schedule for weight/act precision')
-    parser.add_argument('--num_grad_bits_schedule',default=None,type=int,nargs='*',
-                        help='schedule for grad precision')
+    #parser.add_argument('--num_bits_schedule',default=None,type=int,nargs='*',
+    #                    help='schedule for weight/act precision')
 
     parser.add_argument('--is_cyclic_precision', action='store_true',
                         help='cyclic precision schedule')
@@ -91,6 +100,8 @@ def parse_args():
                         help='number of cyclic period for precision, same for weights/activation and gradients')
     parser.add_argument('--automatic_resume', action='store_true',
                         help='automatically resume from latest checkpoint')
+    parser.add_argument('--flip-vertically', action='store_true', default=False)
+    parser.add_argument('--precision_schedule', default='cos_growth', type=str)
     args = parser.parse_args()
     return args
 
@@ -196,6 +207,7 @@ def run_training(args):
     end = time.time()
 
     for _epoch in range(args.start_epoch, args.epoch):
+        # adjust the learning rate per epoch
         lr = adjust_learning_rate(args, optimizer, _epoch)
 
         print('Learning Rate:', lr)
@@ -208,6 +220,7 @@ def run_training(args):
             cyclic_period = int((args.epoch * len(train_loader)) / args.num_cyclic_period)
             _iters = _epoch * len(train_loader) + i
 
+            # adjust precision per iteration
             cyclic_adjust_precision(args, _iters, cyclic_period)
 
             model.train()
@@ -272,17 +285,16 @@ def run_training(args):
         logging.info("Current Best Prec@1: {} ".format(best_prec1))
         logging.info("Current Best Epoch: {}".format(best_epoch))
 
-        checkpoint_path = os.path.join(args.save_path, 'checkpoint_{:05d}_{:.2f}.pth.tar'.format(_epoch, prec1))
-        save_checkpoint({
+        save_checkpoint = {
             'epoch': _epoch,
             'arch': args.arch,
             'state_dict': model.state_dict(),
             'best_prec1': best_prec1,
-        },
-            is_best, filename=checkpoint_path)
-        shutil.copyfile(checkpoint_path, os.path.join(args.save_path,
-                                                      'checkpoint_latest'
-                                                      '.pth.tar'))
+            'train_mets': (losses.avg, top1.avg, cr.avg, cr.val),
+        }
+        torch.save(save_checkpoint, os.path.join(args.save_path, 'final_results.pth'))
+        if is_best:
+            torch.save(save_checkpoint, os.path.join(args.save_path, 'best_results.pth'))
 
 
 def validate(args, test_loader, model, criterion, _epoch):
@@ -380,7 +392,6 @@ class AverageMeter(object):
         self.avg = self.sum / self.count
 
 
-
 def cyclic_adjust_precision(args, _iter, cyclic_period):
     if args.is_cyclic_precision:
         assert len(args.cyclic_num_bits_schedule) == 2
@@ -392,26 +403,105 @@ def cyclic_adjust_precision(args, _iter, cyclic_period):
         num_grad_bit_min = args.cyclic_num_grad_bits_schedule[0]
         num_grad_bit_max = args.cyclic_num_grad_bits_schedule[1]
 
-        args.num_bits = np.rint(num_bit_min +
-                                0.5 * (num_bit_max - num_bit_min) *
-                                (1 + np.cos(np.pi * ((_iter % cyclic_period) / cyclic_period) + np.pi)))
-        args.num_grad_bits = np.rint(num_grad_bit_min +
-                                     0.5 * (num_grad_bit_max - num_grad_bit_min) *
-                                     (1 + np.cos(np.pi * ((_iter % cyclic_period) / cyclic_period) + np.pi)))
-        # print(type(_iter))
-        if _iter % 10 == 0:
+        if args.precision_schedule == 'fixed':
+            assert num_bit_min == num_bit_max
+            assert num_grad_bit_min == num_grad_bit_max
+            args.num_bits = num_bit_min
+            args.num_grad_bits = num_grad_bit_min
+        elif args.precision_schedule == 'cos_decay':
+            #args.num_bits = np.rint(num_bit_min +
+            #                        0.5 * (num_bit_max - num_bit_min) *
+            #                        (1 + np.cos(np.pi * ((_iter % cyclic_period) / cyclic_period) + np.pi)))
+            #args.num_grad_bits = np.rint(num_grad_bit_min +
+            #                             0.5 * (num_grad_bit_max - num_grad_bit_min) *
+            #                             (1 + np.cos(np.pi * ((_iter % cyclic_period) / cyclic_period) + np.pi)))
+            num_period = int(_iter / cyclic_period)
+            if (num_period % 2) == 1:
+                args.num_bits = calc_cos_growth(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+                args.num_grad_bits = calc_cos_growth(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+            else:
+                args.num_bits = calc_cos_decay(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+                args.num_grad_bits = calc_cos_decay(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+        elif args.precision_schedule == 'cos_growth':
+            args.num_bits = calc_cos_growth(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+            args.num_grad_bits = calc_cos_growth(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+        elif args.precision_schedule == 'demon_decay':
+            num_period = int(_iter / cyclic_period)
+            if (num_period % 2) == 1:
+                args.num_bits = calc_demon_growth(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+                args.num_grad_bits = calc_demon_growth(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+            else:
+                args.num_bits = calc_demon_decay(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True, flip_vertically=args.flip_vertically)
+                args.num_grad_bits = calc_demon_decay(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True, flip_vertically=args.flip_vertically)
+        elif args.precision_schedule == 'demon_growth':
+            args.num_bits = calc_demon_growth(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+            args.num_grad_bits = calc_demon_growth(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+        elif args.precision_schedule == 'exp_decay':
+            num_period = int(_iter / cyclic_period)
+            if (num_period % 2) == 1:
+                args.num_bits = calc_exp_growth(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+                args.num_grad_bits = calc_exp_growth(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+            else:
+                args.num_bits = calc_exp_decay(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True, flip_vertically=args.flip_vertically)
+                args.num_grad_bits = calc_exp_decay(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True, flip_vertically=args.flip_vertically)
+        elif args.precision_schedule == 'exp_growth':
+            args.num_bits = calc_exp_growth(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+            args.num_grad_bits = calc_exp_growth(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+        elif args.precision_schedule == 'linear_decay':
+            num_period = int(_iter / cyclic_period)
+            if (num_period % 2) == 1:
+                args.num_bits = calc_linear_growth(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+                args.num_grad_bits = calc_linear_growth(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+            else:
+                args.num_bits = calc_linear_decay(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+                args.num_grad_bits = calc_linear_decay(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+        elif args.precision_schedule == 'linear_growth':
+            args.num_bits = calc_linear_growth(cyclic_period, _iter, num_bit_min, num_bit_max, discrete=True)
+            args.num_grad_bits = calc_linear_growth(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
+        else:
+            raise NotImplementedError(f'{args.precision_schedule} is not a supported precision schedule.')
+        if _iter % args.eval_every == 0:
             logging.info('Iter [{}] num_bits = {} num_grad_bits = {} cyclic precision'.format(_iter, args.num_bits,
+
                                                                                                   args.num_grad_bits))
 
-
-
 def adjust_learning_rate(args, optimizer, _epoch):
-    lr = args.lr * (0.1 ** (_epoch // 30))
+    if args.lr_schedule == 'piecewise':
+        if args.warm_up and (_epoch < 15):
+            lr = 0.01
+        elif 30 <= _epoch < 60:
+            lr = args.lr * (args.step_ratio ** 1)
+        elif _epoch >= 60:
+            lr = args.lr * (args.step_ratio ** 2)
+        else:
+            lr = args.lr
+
+    elif args.lr_schedule == 'linear':
+        t = _epoch / args.epoch
+        lr_ratio = 0.01
+        if args.warm_up and (_epoch < 15):
+            lr = 0.01
+        elif t < 0.5:
+            lr = args.lr
+        elif t < 0.9:
+            lr = args.lr * (1 - (1 - lr_ratio) * (t - 0.5) / 0.4)
+        else:
+            lr = args.lr * lr_ratio
+
+    elif args.lr_schedule == 'anneal_cosine':
+        lr_min = args.lr * (args.step_ratio ** 2)
+        lr_max = args.lr
+        lr = lr_min + 1 / 2 * (lr_max - lr_min) * (1 + np.cos(_epoch / args.epoch * 3.141592653))
+
+    else:
+        raise NotImplementedError(f'{args.lr_schedule} is not a supported lr schedule.')
+
+    if _epoch % args.eval_every == 0:
+        logging.info('Iter [{}] learning rate = {}'.format(_epoch, lr))
 
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
-    return lr
 
 
 def accuracy(output, target, topk=(1,)):
