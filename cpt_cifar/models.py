@@ -43,10 +43,7 @@ class BasicBlock(nn.Module):
         self.downsample = downsample
         self.stride = stride
 
-    #def forward(self, x, num_bits, num_grad_bits):
-    def forward(self, x):
-        num_bits = 32
-        num_grad_bits = 32
+    def forward(self, x, num_bits, num_grad_bits):
         residual = x
 
         out = self.conv1(x, num_bits, num_grad_bits)
@@ -142,10 +139,7 @@ class ResNet(nn.Module):
         return nn.Sequential(*layers)
 
 
-    #def forward(self, x, num_bits, num_grad_bits):
-    def forward(self, x):
-        num_bits = 32
-        num_grad_bits = 32
+    def forward(self, x, num_bits, num_grad_bits):
         x = self.conv1(x, num_bits, num_grad_bits)
         x = self.bn1(x)
         x = self.relu(x)

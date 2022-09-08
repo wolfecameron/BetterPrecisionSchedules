@@ -12,14 +12,14 @@ def Conv3x3(in_planes, out_planes, stride=1):
                      padding=1, bias=False)
 
 
-#def conv3x3(in_planes, out_planes, stride=1):
+def conv3x3(in_planes, out_planes, stride=1):
     "3x3 convolution with padding"
-    return QConv2d(in_planes, out_planes, kernel_size=3, stride=stride,
+    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
                    padding=1, bias=False)
 
 
 def conv(in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=False):
-    return QConv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride,
+    return nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride,
                    padding=padding, dilation=dilation, groups=groups, bias=bias)
 
 
@@ -42,21 +42,18 @@ class BasicBlock(nn.Module):
         self.downsample = downsample
         self.stride = stride
 
-    #def forward(self, x, num_bits, num_grad_bits):
     def forward(self, x):
-        num_bits = 32
-        num_grad_bits = 32
         residual = x
 
-        out = self.conv1(x, num_bits, num_grad_bits)
+        out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
 
-        out = self.conv2(out, num_bits, num_grad_bits)
+        out = self.conv2(out)
         out = self.bn2(out)
 
         if self.downsample is not None:
-            residual = self.downsample(x, num_bits, num_grad_bits)
+            residual = self.downsample(x)
             residual = self.bn3(residual)
 
         out  += residual
@@ -101,8 +98,7 @@ class ResNet(nn.Module):
                 m.weight.data.normal_(0, math.sqrt(2. / n))
 
 
-    def _make_group(self, block, planes, layers, group_id=1
-                    ):
+    def _make_group(self, block, planes, layers, group_id=1):
         """ Create the whole group"""
         for i in range(layers):
             if group_id > 1 and i == 0:
@@ -120,7 +116,7 @@ class ResNet(nn.Module):
         """ create one block and optional a gate module """
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
-            downsample = QConv2d(self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, bias=False)
+            downsample = nn.Conv2d(self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, bias=False)
 
         layer = block(self.inplanes, planes, stride, downsample)
         self.inplanes = planes * block.expansion
@@ -130,7 +126,7 @@ class ResNet(nn.Module):
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
-            downsample = QConv2d(self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, bias=False)
+            downsample = nn.Conv2d(self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, bias=False)
 
         layers = []
         layers.append(block(self.inplanes, planes, stride, downsample))
@@ -141,17 +137,14 @@ class ResNet(nn.Module):
         return nn.Sequential(*layers)
 
 
-    #def forward(self, x, num_bits, num_grad_bits):
     def forward(self, x):
-        num_bits = 32
-        num_grad_bits = 32
-        x = self.conv1(x, num_bits, num_grad_bits)
+        x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
 
         for g in range(3):
             for i in range(self.num_layers[g]):
-                x = getattr(self, 'group{}_layer{}'.format(g+1, i))(x, num_bits, num_grad_bits)
+                x = getattr(self, 'group{}_layer{}'.format(g+1, i))(x)
 
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
@@ -238,14 +231,14 @@ class Block(nn.Module):
             self.bn4 = nn.BatchNorm2d(out_planes)
 
 
-    def forward(self, x, num_bits, num_grad_bits):
-        out = F.relu(self.bn1(self.conv1(x, num_bits, num_grad_bits)))
-        out = F.relu(self.bn2(self.conv2(out, DWS_BITS, DWS_GRAD_BITS)))
-        out = self.bn3(self.conv3(out, num_bits, num_grad_bits))
+    def forward(self, x):
+        out = F.relu(self.bn1(self.conv1(x)))
+        out = F.relu(self.bn2(self.conv2(out)))
+        out = self.bn3(self.conv3(out))
 
         if self.stride == 1:
             if self.shortcut:
-                out = out + self.bn4(self.shortcut(x, num_bits, num_grad_bits))
+                out = out + self.bn4(self.shortcut(x))
             else:
                 out = out + x
         return out
@@ -283,14 +276,14 @@ class MobileNetV2(nn.Module):
                 in_planes = out_planes
 
 
-    def forward(self, x, num_bits, num_grad_bits):
-        x = F.relu(self.bn1(self.conv1(x, num_bits, num_grad_bits)))
+    def forward(self, x):
+        x = F.relu(self.bn1(self.conv1(x)))
 
         for g in range(7):
             for i in range(self.num_layers[g]):
-                x = getattr(self, 'group{}_layer{}'.format(g+1, i))(x, num_bits, num_grad_bits)
+                x = getattr(self, 'group{}_layer{}'.format(g+1, i))(x)
 
-        x = F.relu(self.bn2(self.conv2(x, num_bits, num_grad_bits)))
+        x = F.relu(self.bn2(self.conv2(x)))
 
         # NOTE: change pooling kernel_size 7 -> 4 for CIFAR10
         x = F.avg_pool2d(x, 4)

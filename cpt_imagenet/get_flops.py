@@ -96,7 +96,7 @@ def compute_flops(flops, schedule):
         total_flops += flops * (fw_eflop + bw_eflop)
     return total_flops
 
-arch = 'mobilenet'
+arch = 'resnet18'
 num_iter = 64000
 num_cycle = 8
 cycle_len = (num_iter // num_cycle)

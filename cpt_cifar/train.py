@@ -222,7 +222,7 @@ def run_training(args):
             model.train()
             adjust_learning_rate(args, optimizer, i)
 
-            cyclic_period = int(args.iters / args.num_cyclic_period)
+            cyclic_period = int(args.iters / args.num_cyclic_period) + 1
             cyclic_adjust_precision(args, i, cyclic_period)
 
             i += 1
