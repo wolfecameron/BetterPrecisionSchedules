@@ -3,9 +3,7 @@ import argparse
 import torch
 
 from vanilla_models import (
-    cifar10_resnet_74,
-    cifar10_resnet_152,
-    cifar10_mobilenet_v2,
+    resnet18,
 )
 from fvcore.nn import FlopCountAnalysis
 from quant_scheds import (
@@ -97,25 +95,22 @@ def compute_flops(flops, schedule):
     return total_flops
 
 arch = 'resnet18'
-num_iter = 64000
+num_iter = 5005 * 90
 num_cycle = 8
 cycle_len = (num_iter // num_cycle)
-num_grad_bits = '8 8'
+num_grad_bits = '6 6'
 
 prec_scheds = ['linear_growth', 'linear_decay', 'cos_growth', 'cos_decay', 'demon_growth', 'demon_decay', 'exp_growth', 'exp_decay']
-num_bit_list = ['6 6']
+num_bit_list = ['4 6']
 flips = [True, False]
 
 
-if arch == 'resnet74':
-    model = cifar10_resnet_74()
-elif arch == 'resnet152':
-    model = cifar10_resnet_152()
-elif arch == 'mobilenet':
-    model = cifar10_mobilenet_v2()
+if arch == 'resnet18':
+    model = resnet18()
 else:
-    raise NotImplementedError
-inp = torch.zeros(128, 3, 32, 32).cpu()
+    raise NotImplementedError()
+
+inp = torch.zeros(256, 3, 224, 224).cpu()
 flop_obj = FlopCountAnalysis(model, inp)
 flops = flop_obj.total()
 
