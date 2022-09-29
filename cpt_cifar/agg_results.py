@@ -3,8 +3,8 @@ import os
 import numpy as np
 import torch
 
-res_base = './quant_results/'
-base_name = 'cifar100_cos_growth'
+res_base = '/data/crw13/quant_results/'
+base_name = 'cifar100_cifar100_resnet_74_piecewise-no-def-decay'
 exclude_str = 'nothing'
 model_name = 'cifar100_resnet_74/'
 perf_file_name = 'best_results.pth'
@@ -19,7 +19,7 @@ for x in all_path:
         exp_str = exp_str + flip
     else:
         exp_str = x[len(base_name) + 1:-2]
-    
+   
     fullp = os.path.join(os.path.join(res_base, x), f'{model_name}')
     if not exp_str in all_path_grouped.keys():
         all_path_grouped[exp_str] = [fullp]
