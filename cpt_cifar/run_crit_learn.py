@@ -35,7 +35,7 @@ for it, dit in zip(iters, def_iters):
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
         command = (f'CUDA_VISIBLE_DEVICES={gpu} python crit_learn.py --cmd train '
-                f'--arch {arch} --dataset {dataset} --datadir {datadir} --iters {iters} --def-iters {dit} '
+                f'--arch {arch} --dataset {dataset} --datadir {datadir} --iters {it} --def-iters {dit} '
                 f'--batch_size {bs} --lr_schedule {lr_sched} --lr {lr} --weight_decay {wd} '
                 f'--step_ratio {step_ratio}  --save_folder {save_dir} --eval_every {eval_every} '
                 f'--cyclic_num_bits_schedule {num_bits} --cyclic_num_grad_bits_schedule {num_grad_bit} ')

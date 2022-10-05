@@ -421,6 +421,11 @@ def adjust_precision(args, _iter):
     num_bit_max = args.cyclic_num_bits_schedule[1]
     num_grad_bit_min = args.cyclic_num_grad_bits_schedule[0]
     num_grad_bit_max = args.cyclic_num_grad_bits_schedule[1]
+    print(num_bit_min)
+    print(num_bit_max)
+    print(num_grad_bit_min)
+    print(num_grad_bit_max)
+    input()
 
     if _iter <= args.def_iters:
         args.num_bits = num_bit_min

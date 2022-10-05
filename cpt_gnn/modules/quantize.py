@@ -252,12 +252,12 @@ class QGraphConv(nn.Module):
             # (BarclayII) For RGCN on heterogeneous graphs we need to support GCN on bipartite.
             # quantize the source features
             feat_src, feat_dst = expand_as_pair(feat, graph)
-            feat_qparams = calculate_qparams(feat_src, num_bits=num_bits,
-                    flatten_dims=None, reduce_dim=None, reduce_type='extreme')
-            qfeat_src = quantize(feat_src, qparams=feat_qparams)
+            #feat_qparams = calculate_qparams(feat_src, num_bits=num_bits,
+            #        flatten_dims=None, reduce_dim=None, reduce_type='extreme')
+            #qfeat_src = quantize(feat_src, qparams=feat_qparams)
 
-            # normalize by the out degree
-            # normalization is kept in full precision
+            # normalize by the out degree in full precision
+            # TODO: should we quantize this pointwise degree normalization operation?
             if self._norm in ['left', 'both']:
                 degs = graph.out_degrees().float().clamp(min=1)
                 if self._norm == 'both':
@@ -266,7 +266,7 @@ class QGraphConv(nn.Module):
                     norm = 1.0 / degs
                 shp = norm.shape + (1,) * (feat_src.dim() - 1)
                 norm = torch.reshape(norm, shp)
-                qfeat_src = qfeat_src * norm
+                feat_src = feat_src * norm
 
             if weight is not None:
                 if self.weight is not None:
@@ -282,21 +282,33 @@ class QGraphConv(nn.Module):
             qweight = quantize(weight, qparams=weight_qparams)
 
             if self._in_feats > self._out_feats:
-                # mult W first to reduce the feature size for aggregation.
+                # quantized matrix multiplication
+                feat_qparams = calculate_qparams(feat_src, num_bits=num_bits,
+                        flatten_dims=None, reduce_dim=None, reduce_type='extreme')
+                qfeat_src = quantize(feat_src, qparams=feat_qparams)
                 if weight is not None:
                     qfeat_src = torch.matmul(qfeat_src, qweight)
+                qfeat_src = quantize_grad(qfeat_src, num_bits=num_grad_bits, flatten_dims=None)
+
+                # aggregate at full precision
                 graph.srcdata['h'] = qfeat_src
                 graph.update_all(aggregate_fn, fn.sum(msg='m', out='h'))
                 qrst = graph.dstdata['h']
             else:
-                # aggregate first then mult W
-                graph.srcdata['h'] = qfeat_src
+                # aggregate at full precision
+                graph.srcdata['h'] = feat_src
                 graph.update_all(aggregate_fn, fn.sum(msg='m', out='h'))
-                qrst = graph.dstdata['h']
+                rst = graph.dstdata['h']
+
+                # quantized matrix multiplication of features
+                rst_qparams = calculate_qparams(rst, num_bits=num_bits,
+                        flatten_dims=None, reduce_dim=None, reduce_type='extreme')
+                qrst = quantize(rst, qparams=rst_qparams)
                 if weight is not None:
                     qrst = torch.matmul(qrst, qweight)
-
-            # normalize by the in degree
+                qrst = quantize_grad(qrst, num_bits=num_grad_bits, flatten_dims=None)
+            
+            # normalize by the in degree in full precision
             if self._norm in ['right', 'both']:
                 degs = graph.in_degrees().float().clamp(min=1)
                 if self._norm == 'both':
@@ -307,17 +319,23 @@ class QGraphConv(nn.Module):
                 norm = torch.reshape(norm, shp)
                 qrst = qrst * norm
 
-            # apply the (quantized) bias
+            # quantized addition of the bias 
             if self.bias is not None:
+                # quantize the bias
                 bias_qparams = calculate_qparams(self.bias, num_bits=num_bits,
                         flatten_dims=None, reduce_dim=None, reduce_type='mean')
                 qbias = quantize(self.bias, qparams=bias_qparams)
+
+                # quantize the features
+                qrst_qparams = calculate_qparams(qrst, num_bits=num_bits,
+                        flatten_dims=None, reduce_dim=None, reduce_type='extreme')
+                qrst = quantize(qrst, qparams=qrst_qparams)
+                
+                # add bias and quantize the gradient
                 qrst = qrst + qbias
+                qrst = quantize_grad(qrst, num_bits=num_grad_bits, flatten_dims=None)
 
-            # perform quantization on gradient in backward pass
-            qrst = quantize_grad(qrst, num_bits=num_grad_bits, flatten_dims=None)
-
-            # apply activation
+            # apply activation in full precision
             if self._activation is not None:
                 qrst = self._activation(qrst)
 

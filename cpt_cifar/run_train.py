@@ -51,6 +51,7 @@ for ds in datasets:
                         if pretrained:
                             command += ' --pretrained'
                         os.system(command)
+                        raise ""
 
                         exp_name = f'{ds}_{arch}_{ps}_quant_max{max_bit}_{c}_{t}_horizontal/'
                         save_dir = os.path.join(base_save_dir, exp_name)
