@@ -19,14 +19,16 @@ def _deflatten_as(x, x_full):
 def calculate_qparams(x, num_bits, flatten_dims=_DEFAULT_FLATTEN, reduce_dim=0, reduce_type='mean', keepdim=False,
                       true_zero=False):
     with torch.no_grad():
-        x_flat = x.flatten(*flatten_dims)
+        print(reduce_type)
+        print(x.shape)
+        x_flat = x.flatten(*flatten_dims) # make it have shape [batch_size, single_flat_dim]
+        print(x_flat.shape)
         if x_flat.dim() == 1:
             min_values = _deflatten_as(x_flat.min(), x)
             max_values = _deflatten_as(x_flat.max(), x)
         else:
             min_values = _deflatten_as(x_flat.min(-1)[0], x)
             max_values = _deflatten_as(x_flat.max(-1)[0], x)
-
         if reduce_dim is not None:
             if reduce_type == 'mean':
                 min_values = min_values.mean(reduce_dim, keepdim=keepdim)
@@ -34,8 +36,10 @@ def calculate_qparams(x, num_bits, flatten_dims=_DEFAULT_FLATTEN, reduce_dim=0, 
             else:
                 min_values = min_values.min(reduce_dim, keepdim=keepdim)[0]
                 max_values = max_values.max(reduce_dim, keepdim=keepdim)[0]
-
+  
         range_values = max_values - min_values
+        print(range_values.shape)
+        input()
         return QParams(range=range_values, zero_point=min_values,
                        num_bits=num_bits)
 
@@ -47,7 +51,6 @@ class UniformQuantize(InplaceFunction):
                 reduce_dim=0, dequantize=True, signed=False, stochastic=False, inplace=False):
 
         ctx.inplace = inplace
-
         if ctx.inplace:
             ctx.mark_dirty(input)
             output = input
@@ -119,21 +122,21 @@ class UniformQuantizeGrad(InplaceFunction):
         return grad_input, None, None, None, None, None, None, None
 
 
-def conv2d_biprec(input, weight, bias=None, stride=1, padding=0, dilation=1, groups=1, num_bits_grad=None):
-    out1 = F.conv2d(input.detach(), weight, bias,
-                    stride, padding, dilation, groups)
-    out2 = F.conv2d(input, weight.detach(), bias.detach() if bias is not None else None,
-                    stride, padding, dilation, groups)
-    out2 = quantize_grad(out2, num_bits=num_bits_grad, flatten_dims=(1, -1))
-    return out1 + out2 - out1.detach()
+#def conv2d_biprec(input, weight, bias=None, stride=1, padding=0, dilation=1, groups=1, num_bits_grad=None):
+#    out1 = F.conv2d(input.detach(), weight, bias,
+#                    stride, padding, dilation, groups)
+#    out2 = F.conv2d(input, weight.detach(), bias.detach() if bias is not None else None,
+#                    stride, padding, dilation, groups)
+#    out2 = quantize_grad(out2, num_bits=num_bits_grad, flatten_dims=(1, -1))
+#    return out1 + out2 - out1.detach()
 
 
-def linear_biprec(input, weight, bias=None, num_bits_grad=None):
-    out1 = F.linear(input.detach(), weight, bias)
-    out2 = F.linear(input, weight.detach(), bias.detach()
-    if bias is not None else None)
-    out2 = quantize_grad(out2, num_bits=num_bits_grad)
-    return out1 + out2 - out1.detach()
+#def linear_biprec(input, weight, bias=None, num_bits_grad=None):
+#    out1 = F.linear(input.detach(), weight, bias)
+#    out2 = F.linear(input, weight.detach(), bias.detach()
+#    if bias is not None else None)
+#    out2 = quantize_grad(out2, num_bits=num_bits_grad)
+#    return out1 + out2 - out1.detach()
 
 
 def quantize(x, num_bits=None, qparams=None, flatten_dims=_DEFAULT_FLATTEN, reduce_dim=0, dequantize=True, signed=False,
@@ -240,15 +243,15 @@ class QConv2d(nn.Conv2d):
         return output
         
 
-    def conv2d_quant_act(self, input_fw, input_bw, weight, bias=None, stride=1, padding=0, dilation=1, groups=1,
-                         error_bits=0, gc_bits=0):
-        out1 = F.conv2d(input_fw, weight.detach(), bias.detach() if bias is not None else None,
-                        stride, padding, dilation, groups)
-        out2 = F.conv2d(input_bw.detach(), weight, bias,
-                        stride, padding, dilation, groups)
-        out1 = quantize_grad(out1, num_bits=error_bits)
-        out2 = quantize_grad(out2, num_bits=gc_bits)
-        return out1 + out2 - out2.detach()
+    #def conv2d_quant_act(self, input_fw, input_bw, weight, bias=None, stride=1, padding=0, dilation=1, groups=1,
+    #                     error_bits=0, gc_bits=0):
+    #    out1 = F.conv2d(input_fw, weight.detach(), bias.detach() if bias is not None else None,
+    #                    stride, padding, dilation, groups)
+    #    out2 = F.conv2d(input_bw.detach(), weight, bias,
+    #                    stride, padding, dilation, groups)
+    #    out1 = quantize_grad(out1, num_bits=error_bits)
+    #    out2 = quantize_grad(out2, num_bits=gc_bits)
+    #    return out1 + out2 - out2.detach()
 
 
 

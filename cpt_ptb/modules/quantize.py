@@ -1,11 +1,17 @@
 from collections import namedtuple
 import math
+from typing import List, Tuple, Optional, overload
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.autograd import Variable
 from torch.autograd.function import InplaceFunction, Function
-import dgl.function as fn
-from dgl.utils import expand_as_pair
+from torch.nn.utils.rnn import PackedSequence
+from torch.nn.modules.rnn import (
+    RNNBase,
+    apply_permutation
+)
+from torch import Tensor, _VF
 
 QParams = namedtuple('QParams', ['range', 'zero_point', 'num_bits'])
 
@@ -38,7 +44,7 @@ def calculate_qparams(x, num_bits, flatten_dims=_DEFAULT_FLATTEN, reduce_dim=0, 
             else:
                 min_values = min_values.min(reduce_dim, keepdim=keepdim)[0]
                 max_values = max_values.max(reduce_dim, keepdim=keepdim)[0]
-  
+ 
         range_values = max_values - min_values
         return QParams(range=range_values, zero_point=min_values,
                        num_bits=num_bits)
@@ -192,170 +198,88 @@ class QuantMeasure(nn.Module):
             return q_input
 
 
-class QGraphConv(nn.Module):
-    def __init__(self, in_feats, out_feats, norm='both', weight=True, bias=True,
-            activation=None, allow_zero_in_degree=False):
-        super(QGraphConv, self).__init__()
-        if norm not in ('none', 'both', 'right', 'left'):
-            raise DGLError('Invalid norm value. Must be either "none", "both", "right" or "left".'
-                           ' But got "{}".'.format(norm))
-        self._in_feats = in_feats
-        self._out_feats = out_feats
-        self._norm = norm
-        self._allow_zero_in_degree = allow_zero_in_degree
+class QLinear(nn.Linear):
+    def __init__(self, in_features, out_features, bias=True, device=None, dtype=None):
+        super(QLinear, self).__init__(in_features, out_features, bias, device, dtype)
+        self.quantize_input = QuantMeasure(shape_measure=(1, 1), flatten_dims=(0, -1))
 
-        # two main parameters being used are weight and bias
-        if weight:
-            self.weight = nn.Parameter(torch.Tensor(in_feats, out_feats))
-        else:
-            self.register_parameter('weight', None)
-        if bias:
-            self.bias = nn.Parameter(torch.Tensor(out_feats))
-        else:
-            self.register_parameter('bias', None)
+    def forward(self, x, num_bits, num_grad_bits):
+        # quantize the input
+        qx = self.quantize_input(x, num_bits)
 
-        self.reset_parameters()
+        # quantize the weights
+        weight_qparam = calculate_qparams(self.weight, num_bits=num_bits, flatten_dims=None,
+                reduce_dim=None, reduce_type='mean')
+        qweight = quantize(self.weight, qparams=weight_qparam)
 
-        self._activation = activation
-
-    def reset_parameters(self):
-        if self.weight is not None:
-            nn.init.xavier_uniform_(self.weight)
+        # quantize the bias
         if self.bias is not None:
-            nn.init.zeros_(self.bias)
+            bias_qparam = calculate_qparams(self.bias, num_bits=num_bits, flatten_dims=None,
+                    reduce_dim=None, reduce_type='mean')
+            qbias = quantize(self.bias, qparams=bias_qparam)
+        else:
+            qbias = None
+
+        # run quantized forward pass
+        output = F.linear(qx, qweight, qbias)
+        output = quantize_grad(output, num_bits=num_grad_bits, flatten_dims=None)
+        return output
 
 
-    def set_allow_zero_in_degree(self, set_value):
-        self._allow_zero_in_degree = set_value
-    
-    def forward(self, graph, feat, num_bits, num_grad_bits, weight=None, edge_weight=None):
-        with graph.local_scope():
-            if not self._allow_zero_in_degree:
-                if (graph.in_degrees() == 0).any():
-                    raise ValueError('There are 0-in-degree nodes in the graph, '
-                                   'output for those nodes will be invalid. '
-                                   'This is harmful for some applications, '
-                                   'causing silent performance regression. '
-                                   'Adding self-loop on the input graph by '
-                                   'calling `g = dgl.add_self_loop(g)` will resolve '
-                                   'the issue. Setting ``allow_zero_in_degree`` '
-                                   'to be `True` when constructing this module will '
-                                   'suppress the check and let the code run.')
+class QLSTM(nn.Module):
+    """quantized, single-layer LSTM"""
+    def __init__(self, input_sz, hidden_sz):
+        super().__init__()
+        self.input_sz = input_sz
+        self.hidden_size = hidden_sz
+        #self.W = nn.Parameter(torch.Tensor(input_sz, hidden_sz * 4))
+        #self.U = nn.Parameter(torch.Tensor(hidden_sz, hidden_sz * 4))
+        #self.bias = nn.Parameter(torch.Tensor(hidden_sz * 4))
 
-            aggregate_fn = fn.copy_src('h', 'm')
-            assert edge_weight is None
-            #if edge_weight is not None:
-            #    assert edge_weight.shape[0] == graph.number_of_edges()
-            #    graph.edata['_edge_weight'] = edge_weight
-            #    aggregate_fn = fn.u_mul_e('h', '_edge_weight', 'm')
-
-            # (BarclayII) For RGCN on heterogeneous graphs we need to support GCN on bipartite.
-            # quantize the source features
-            feat_src, feat_dst = expand_as_pair(feat, graph)
-            #feat_qparams = calculate_qparams(feat_src, num_bits=num_bits,
-            #        flatten_dims=None, reduce_dim=None, reduce_type='extreme')
-            #qfeat_src = quantize(feat_src, qparams=feat_qparams)
-
-            # normalize by the out degree in full precision
-            # TODO: should we quantize this pointwise degree normalization operation?
-            if self._norm in ['left', 'both']:
-                degs = graph.out_degrees().float().clamp(min=1)
-                if self._norm == 'both':
-                    norm = torch.pow(degs, -0.5)
-                else:
-                    norm = 1.0 / degs
-                shp = norm.shape + (1,) * (feat_src.dim() - 1)
-                norm = torch.reshape(norm, shp)
-                feat_src = feat_src * norm
-
-            if weight is not None:
-                if self.weight is not None:
-                    raise ValueError('External weight is provided while at the same time the'
-                                   ' module has defined its own weight parameter. Please'
-                                   ' create the module with flag weight=False.')
-            else:
-                weight = self.weight
-            
-            # quantize the weights
-            weight_qparams = calculate_qparams(weight, num_bits=num_bits,
-                    flatten_dims=None, reduce_dim=None, reduce_type='mean')
-            qweight = quantize(weight, qparams=weight_qparams)
-
-            if self._in_feats > self._out_feats:
-                # quantized matrix multiplication
-                feat_qparams = calculate_qparams(feat_src, num_bits=num_bits,
-                        flatten_dims=None, reduce_dim=None, reduce_type='extreme')
-                qfeat_src = quantize(feat_src, qparams=feat_qparams)
-                if weight is not None:
-                    qfeat_src = torch.matmul(qfeat_src, qweight)
-                qfeat_src = quantize_grad(qfeat_src, num_bits=num_grad_bits, flatten_dims=None)
-
-                # aggregate at full precision
-                graph.srcdata['h'] = qfeat_src
-                graph.update_all(aggregate_fn, fn.sum(msg='m', out='h'))
-                qrst = graph.dstdata['h']
-            else:
-                # aggregate at full precision
-                graph.srcdata['h'] = feat_src
-                graph.update_all(aggregate_fn, fn.sum(msg='m', out='h'))
-                rst = graph.dstdata['h']
-
-                # quantized matrix multiplication of features
-                rst_qparams = calculate_qparams(rst, num_bits=num_bits,
-                        flatten_dims=None, reduce_dim=None, reduce_type='extreme')
-                qrst = quantize(rst, qparams=rst_qparams)
-                if weight is not None:
-                    qrst = torch.matmul(qrst, qweight)
-                qrst = quantize_grad(qrst, num_bits=num_grad_bits, flatten_dims=None)
-            
-            # normalize by the in degree in full precision
-            if self._norm in ['right', 'both']:
-                degs = graph.in_degrees().float().clamp(min=1)
-                if self._norm == 'both':
-                    norm = torch.pow(degs, -0.5)
-                else:
-                    norm = 1.0 / degs
-                shp = norm.shape + (1,) * (feat_dst.dim() - 1)
-                norm = torch.reshape(norm, shp)
-                qrst = qrst * norm
-
-            # quantized addition of the bias 
-            if self.bias is not None:
-                # quantize the bias
-                bias_qparams = calculate_qparams(self.bias, num_bits=num_bits,
-                        flatten_dims=None, reduce_dim=None, reduce_type='mean')
-                qbias = quantize(self.bias, qparams=bias_qparams)
-
-                # quantize the features
-                qrst_qparams = calculate_qparams(qrst, num_bits=num_bits,
-                        flatten_dims=None, reduce_dim=None, reduce_type='extreme')
-                qrst = quantize(qrst, qparams=qrst_qparams)
+        # use quantized version of weight matrices
+        # bias vector contained implicitly within W
+        self.W = QLinear(input_sz, hidden_sz * 4, bias=True)
+        self.U = QLinear(hidden_sz, hidden_sz * 4, bias=False)
+        self.init_weights()
                 
-                # add bias and quantize the gradient
-                qrst = qrst + qbias
-                qrst = quantize_grad(qrst, num_bits=num_grad_bits, flatten_dims=None)
+    def init_weights(self):
+        stdv = 1.0 / math.sqrt(self.hidden_size)
+        for weight in self.parameters():
+            weight.data.uniform_(-stdv, stdv)
+         
+    def forward(self, x, init_states, num_bits, num_grad_bits):
+        seq_sz, bs, _ = x.size()
+        hidden_seq = []
+        #if init_states is None:
+        #    h_t, c_t = (torch.zeros(1, bs, self.hidden_size).to(x.device), 
+        #                torch.zeros(1, bs, self.hidden_size).to(x.device))
+        #else:
+        assert init_states is not None
+        h_t, c_t = init_states
+         
+        HS = self.hidden_size
+        for t in range(seq_sz):
+            x_t = x[t, :, :][None, :]
+            #gates = x_t @ self.W + h_t @ self.U + self.bias
+            gates = self.W(x_t, num_bits, num_grad_bits) + self.U(h_t, num_bits, num_grad_bits)
 
-            # apply activation in full precision
-            if self._activation is not None:
-                qrst = self._activation(qrst)
-
-            return qrst
-
-
-    def extra_repr(self):
-        """Set the extra representation of the module,
-        which will come into effect when printing the model.
-        """
-        summary = 'in={_in_feats}, out={_out_feats}'
-        summary += ', normalization={_norm}'
-        if '_activation' in self.__dict__:
-            summary += ', activation={_activation}'
-        return summary.format(**self.__dict__)
-
+            # activation functions/gating are applied in full precision
+            i_t, f_t, g_t, o_t = (
+                torch.sigmoid(gates[:, :, :HS]), # input
+                torch.sigmoid(gates[:, :, HS:HS*2]), # forget
+                torch.tanh(gates[:, :, HS*2:HS*3]),
+                torch.sigmoid(gates[:, :, HS*3:]), # output
+            )
+            c_t = f_t * c_t + i_t * g_t
+            h_t = o_t * torch.tanh(c_t)
+            hidden_seq.append(h_t)
+        hidden_seq = torch.cat(hidden_seq, dim=0)
+        return hidden_seq, (h_t, c_t)
 
 
 if __name__ == '__main__':
-    x = torch.rand(2, 3)
-    x_q = quantize(x, flatten_dims=(-1), num_bits=8, dequantize=True)
-    print(x)
-    print(x_q)
+    #x = torch.rand(2, 3)
+    #x_q = quantize(x, flatten_dims=(-1), num_bits=8, dequantize=True)
+    #print(x)
+    #print(x_q)
+    LSTM(100, 100)
