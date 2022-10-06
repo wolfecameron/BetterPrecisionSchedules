@@ -8,7 +8,7 @@ trials = 2
 
 dpt = 0.5
 lr = 1e-3
-lrs = 'cosine'
+lrs = 'cosine-no-def-decay'
 layers = 2
 hid = 512
 wd = 5e-4
@@ -18,7 +18,7 @@ num_bits = '3 8'
 num_grad_bits = '8 8'
 max_bit = num_bits[-1]
 min_bit = num_bits[0]
-save_name = f'./results/arxiv_crit_learn_{min_bit}_{max_bit}_00.json'
+save_name = f'./results/arxiv_crit_learn_{min_bit}_{max_bit}_nodefdecay_00.json'
 
 def add_accs_to_results(results, name, accs):
     if name in results.keys():
@@ -47,8 +47,8 @@ for it, dit in zip(iters, def_iters):
             f'--def-epochs {dit} --cyclic_num_bits_schedule {num_bits} '
             f'--cyclic_num_grad_bits_schedule {num_grad_bits} '
         )
-        os.system(command + ' > arxiv_output.txt')
-        with open('arxiv_output.txt', 'r') as f:
+        os.system(command + ' > arxiv_cl_output.txt')
+        with open('arxiv_cl_output.txt', 'r') as f:
             trn_output = f.readlines()
         final_test_acc = float(trn_output[-3][-6:])
         best_val_acc = float(trn_output[-2][-6:])
