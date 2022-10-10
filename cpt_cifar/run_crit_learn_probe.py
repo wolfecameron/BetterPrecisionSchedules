@@ -3,8 +3,8 @@ import os
 # test one
 # setup
 gpu = 0
-datadir = '/home/exx/data/'
-base_save_dir = './quant_results'
+datadir = '/data/'
+base_save_dir = '/data/crw13/quant_results'
 eval_every = 390
 trials = 2
 
@@ -31,14 +31,15 @@ max_bit = num_bits[-1]
 min_bit = num_bits[0]
 for sd, ed in zip(start_defs, end_defs):
     for t in range(trials):
-        exp_name = f'{dataset}_{arch}_{sd}_{ed}_quant_min{min_bit}_{t}/'
+        exp_name = f'{dataset}_{arch}_probe_{sd}_{ed}_quant_min{min_bit}_{t}/'
         save_dir = os.path.join(base_save_dir, exp_name)
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
         command = (f'CUDA_VISIBLE_DEVICES={gpu} python crit_learn_probe.py --cmd train '
-                f'--arch {arch} --dataset {dataset} --datadir {datadir} --iters {iters} --start-def {sd} --end-def {ed} '
+                f'--arch {arch} --dataset {dataset} --datadir {datadir} --iters {iters} '
+                f'--start-def {sd} --end-def {ed} '
                 f'--batch_size {bs} --lr_schedule {lr_sched} --lr {lr} --weight_decay {wd} '
-                f'--step_ratio {step_ratio}  --save_folder {save_dir} --eval_every {eval_every} '
+                f'--step_ratio {step_ratio} --save_folder {save_dir} --eval_every {eval_every} '
                 f'--cyclic_num_bits_schedule {num_bits} --cyclic_num_grad_bits_schedule {num_grad_bit} ')
         if warm_up:
             command += ' --warm_up'

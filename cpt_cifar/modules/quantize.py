@@ -19,10 +19,7 @@ def _deflatten_as(x, x_full):
 def calculate_qparams(x, num_bits, flatten_dims=_DEFAULT_FLATTEN, reduce_dim=0, reduce_type='mean', keepdim=False,
                       true_zero=False):
     with torch.no_grad():
-        print(reduce_type)
-        print(x.shape)
         x_flat = x.flatten(*flatten_dims) # make it have shape [batch_size, single_flat_dim]
-        print(x_flat.shape)
         if x_flat.dim() == 1:
             min_values = _deflatten_as(x_flat.min(), x)
             max_values = _deflatten_as(x_flat.max(), x)
@@ -38,8 +35,6 @@ def calculate_qparams(x, num_bits, flatten_dims=_DEFAULT_FLATTEN, reduce_dim=0, 
                 max_values = max_values.max(reduce_dim, keepdim=keepdim)[0]
   
         range_values = max_values - min_values
-        print(range_values.shape)
-        input()
         return QParams(range=range_values, zero_point=min_values,
                        num_bits=num_bits)
 
@@ -259,4 +254,3 @@ if __name__ == '__main__':
     x = torch.rand(2, 3)
     x_q = quantize(x, flatten_dims=(-1), num_bits=8, dequantize=True)
     print(x)
-    print(x_q)

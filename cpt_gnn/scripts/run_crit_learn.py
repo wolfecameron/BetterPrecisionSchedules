@@ -18,7 +18,7 @@ num_bits = '3 8'
 num_grad_bits = '8 8'
 max_bit = num_bits[-1]
 min_bit = num_bits[0]
-save_name = f'./results/arxiv_crit_learn_{min_bit}_{max_bit}_nodefdecay_00.json'
+save_name = f'/data/crw13/gnn_quant/arxiv_crit_learn_{min_bit}_{max_bit}_nodefdecay_00.json'
 
 def add_accs_to_results(results, name, accs):
     if name in results.keys():

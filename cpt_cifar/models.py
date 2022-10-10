@@ -235,7 +235,7 @@ class Block(nn.Module):
 
     def forward(self, x, num_bits, num_grad_bits):
         out = F.relu(self.bn1(self.conv1(x, num_bits, num_grad_bits)))
-        out = F.relu(self.bn2(self.conv2(out, DWS_BITS, DWS_GRAD_BITS)))
+        out = F.relu(self.bn2(self.conv2(out, num_bits, num_grad_bits)))
         out = self.bn3(self.conv3(out, num_bits, num_grad_bits))
 
         if self.stride == 1:
