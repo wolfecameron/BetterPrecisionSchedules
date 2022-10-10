@@ -136,6 +136,7 @@ def cyclic_adjust_precision(args, _epoch):
     num_bit_max = args.cyclic_num_bits_schedule[1]
     num_grad_bit_min = args.cyclic_num_grad_bits_schedule[0]
     num_grad_bit_max = args.cyclic_num_grad_bits_schedule[1]
+    assert num_grad_bit_min == num_grad_bit_max
     if _epoch <= args.def_epochs:
         args.num_bits = num_bit_min
     else:
