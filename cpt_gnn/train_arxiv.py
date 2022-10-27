@@ -143,9 +143,10 @@ def main():
     g = g.to(device)
     n_features = feat.size()[-1]
     n_classes = dataset.num_classes
-
+    print(n_features, args.n_hidden, n_classes, args.n_layers, args.dropout)
     model = QGCN(g, n_features, args.n_hidden, n_classes, args.n_layers,
             F.relu, args.dropout).to(device)
+    raise ""
     vals, tests = [], []
     optimizer = torch.optim.Adam(
             model.parameters(), lr=args.lr, weight_decay=args.weight_decay)

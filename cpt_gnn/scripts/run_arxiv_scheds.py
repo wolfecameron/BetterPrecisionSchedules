@@ -3,7 +3,7 @@
 import os
 import json
 
-gpu = 0
+gpu = 1
 epochs = 500
 dpt = 0.2
 lr = 1e-3
@@ -12,16 +12,16 @@ layers = 2
 hid = 512
 wd = 5e-4
 eval_len = 25
-ngbs = '8 8'
+ngbs = '6 6'
 
-tags = 'axiv_sched_quant0'
+tags = 'axiv_sched_quant1'
 qscheds = ['demon_decay', 'demon_growth', 'exp_decay', 'exp_growth', 'linear_decay', 'linear_growth', 'cos_decay', 'cos_growth']
-nbs = ['3 8', '4 8']
+nbs = ['3 6']
 cycles = [8]
 trials = 3
+save_name = './results/arxiv_sched_test_01.json'
 
 def add_accs_to_results(results, name, accs):
-    save_name = './results/arxiv_sched_test_00.json'
     if name in results.keys():
         results[name]['final_test_acc'].append(accs[0])
         results[name]['best_val_acc'].append(accs[1])
@@ -50,10 +50,12 @@ for nb in nbs:
                         f'--n-layers {layers} --n-hidden {hid} --dropout {dpt} --lr {lr} --lr-schedule {lrs} '
                         f'--n-epochs {epochs} --weight-decay {wd} --eval_every {eval_len} '
                         f'--precision_schedule {ps} --cyclic_num_bits_schedule {nb} '
-                        f'--cyclic_num_grad_bits_schedule {ngbs} --use-wandb --tags {tags} --flip-vertically '
+                        f'--cyclic_num_grad_bits_schedule {ngbs} --tags {tags} --flip-vertically '
                         f'--num_cyclic_period {c} '
                     )
-                    os.system(command + ' > trn_output.txt')
+                    os.system(command)
+                    raise ""
+                    #os.system(command + ' > trn_output.txt')
                     with open('trn_output.txt', 'r') as f:
                         trn_output = f.readlines()
                     final_test_acc = float(trn_output[-3][-6:])

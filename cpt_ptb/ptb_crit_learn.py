@@ -15,7 +15,7 @@ from modules import data
 # Add ckp
 parser = argparse.ArgumentParser(description='PyTorch PennTreeBank RNN/LSTM Language Model')
 parser.add_argument('--exp-name', type=str, default='gnn_quant_00')
-parser.add_argument('--data', type=str, default='/home/exx/data/ptb', 
+parser.add_argument('--data', type=str, default='/home/exx/data/ptb', # /input
                     help='location of the data corpus')
 parser.add_argument('--emsize', type=int, default=650,
                     help='size of word embeddings')
@@ -27,7 +27,7 @@ parser.add_argument('--clip', type=float, default=0.25,
                     help='gradient clipping')
 parser.add_argument('--epochs', type=int, default=40,
                     help='upper epoch limit')
-parser.add_argument('--def-epochs', type=int, default=0)
+parser.add_argument('--def-epochs', type=int, default=10)
 parser.add_argument('--batch_size', type=int, default=20, metavar='N',
                     help='batch size')
 parser.add_argument('--bptt', type=int, default=35,
@@ -105,12 +105,19 @@ def evaluate(data_source):
     return total_loss / len(data_source)
 
 def train(epoch):
-    cyclic_adjust_precision(args, epoch)
+    #iter_per_epoch = ((train_data.size(0) - 1) // args.bptt) + 1
+    #total_iters = args.epochs * (iter_per_epoch)
+    #cycle_length = (total_iters // args.num_cyclic_period) + 1
+
     model.train()
     total_loss = 0
     ntokens = len(corpus.dictionary)
     hidden = model.init_hidden(args.batch_size)
-    for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt*10)):
+    for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
+        # adjust the precision at every batch batch
+        #global_iter = (epoch * iter_per_epoch) + batch
+        cyclic_adjust_precision(args, epoch)
+
         data, targets = get_batch(train_data, i)
         # Starting each batch, we detach the hidden state from how it was previously produced.
         # If we didn't, the model would try backpropagating all the way to start of the dataset.
@@ -132,16 +139,17 @@ def train(epoch):
 def cyclic_adjust_precision(args, _epoch):
     assert len(args.cyclic_num_bits_schedule) == 2
     assert len(args.cyclic_num_grad_bits_schedule) == 2
+
     num_bit_min = args.cyclic_num_bits_schedule[0]
     num_bit_max = args.cyclic_num_bits_schedule[1]
     num_grad_bit_min = args.cyclic_num_grad_bits_schedule[0]
     num_grad_bit_max = args.cyclic_num_grad_bits_schedule[1]
-    if _epoch <= args.def_epochs:
+    assert num_grad_bit_min == num_grad_bit_max
+    if _epoch < args.def_epochs:
         args.num_bits = num_bit_min
     else:
         args.num_bits = num_bit_max
     args.num_grad_bits = num_grad_bit_max
-
 
 
 # Loop over epochs.
@@ -174,7 +182,6 @@ for epoch in range(args.epochs):
         print(f'\tTest PPL: {test_ppls[-1]:.2f}')
 
     # Anneal the learning rate if no improvement has been seen in the validation dataset.
-    # can add some logic here to only decay after def epochs
     if not best_val_loss or val_loss < best_val_loss:
         best_val_loss = val_loss
     else:
@@ -184,5 +191,5 @@ for epoch in range(args.epochs):
 max_idx = np.argmin(np.array(val_ppls))
 best_val_ppl = val_ppls[max_idx]
 best_test_ppl = test_ppls[max_idx]
-print(f"Validation PPL: {best_val_ppl:.4f}")
-print(f"Test PPL: {best_test_ppl:.4f}")
+print(f"Validation PPL: {best_val_ppl:.2f}")
+print(f"Test PPL: {best_test_ppl:.2f}")

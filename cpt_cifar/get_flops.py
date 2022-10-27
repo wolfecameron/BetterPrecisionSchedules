@@ -100,10 +100,11 @@ arch = 'mobilenet'
 num_iter = 64000
 num_cycle = 8
 cycle_len = (num_iter // num_cycle)
-num_grad_bits = '8 8'
 
 prec_scheds = ['linear_growth', 'linear_decay', 'cos_growth', 'cos_decay', 'demon_growth', 'demon_decay', 'exp_growth', 'exp_decay']
-num_bit_list = ['6 6']
+#prec_scheds = ['fixed']
+num_grad_bit_list = ['6 6', '8 8']
+num_bit_list = ['4 6', '4 8']
 flips = [True, False]
 
 
@@ -119,7 +120,7 @@ inp = torch.zeros(128, 3, 32, 32).cpu()
 flop_obj = FlopCountAnalysis(model, inp)
 flops = flop_obj.total()
 
-for num_bits in num_bit_list:
+for num_bits, num_grad_bits in zip(num_bit_list, num_grad_bit_list):
     for sched in prec_scheds:
         if not 'growth' in sched and not 'cos' in sched and not 'linear' in sched:
             for flip in flips:

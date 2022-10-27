@@ -3,8 +3,8 @@ import os
 # test one
 # setup
 gpu = 0
-datadir = '/home/exx/data/'
-base_save_dir = './quant_results'
+datadir = '/data/'
+base_save_dir = '/data/crw13/quant_results'
 eval_every = 390
 trials = 2
 
@@ -21,7 +21,7 @@ warm_up = False
 pretrained = False
 
 # quant
-num_bits = '3 8'
+num_bits = '2 8'
 num_grad_bit = '8 8'
 
 # stuff that changes
@@ -30,7 +30,7 @@ max_bit = num_bits[-1]
 min_bit = num_bits[0]
 for it, dit in zip(iters, def_iters):
     for t in range(trials):
-        exp_name = f'{dataset}_{arch}_{dit}_quant_min{min_bit}_{t}/'
+        exp_name = f'{dataset}_{arch}_{lr_sched}_{dit}_quant_min{min_bit}_{t}/'
         save_dir = os.path.join(base_save_dir, exp_name)
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)

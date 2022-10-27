@@ -153,6 +153,8 @@ def train(epoch):
     total_loss = 0
     ntokens = len(corpus.dictionary)
     hidden = model.init_hidden(args.batch_size)
+    print((train_data.size(0) - 1) // args.bptt)
+    raise ""
     for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
         # adjust the precision at every batch batch
         global_iter = (epoch * iter_per_epoch) + batch
