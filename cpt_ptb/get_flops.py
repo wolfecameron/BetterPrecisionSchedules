@@ -1,10 +1,10 @@
 import argparse
+import math
 
 import torch
 
 from vanilla_models import (
-    resnet18,
-    resnet34,
+    PTB_LSTM,
 )
 from fvcore.nn import FlopCountAnalysis
 from quant_scheds import (
@@ -95,31 +95,29 @@ def compute_flops(flops, schedule):
         total_flops += flops * (fw_eflop + bw_eflop)
     return total_flops
 
-arch = 'resnet18'
-num_iter = 5005 * 90
+
+num_iter = 1327 * 40
 num_cycle = 8
 cycle_len = (num_iter // num_cycle)
 
-#prec_scheds = ['linear_growth', 'linear_decay', 'cos_growth', 'cos_decay', 'demon_growth', 'demon_decay', 'exp_growth', 'exp_decay']
-#num_bit_list = ['4 6', '4 8']
-#num_grad_bit_list = ['6 6', '8 8']
+#num_bit_list = ['5 8', '5 6']
+#num_grad_bit_list = ['8 8', '6 6']
 flips = [True, False]
+#prec_scheds = ['linear_growth', 'linear_decay', 'cos_growth', 'cos_decay', 'demon_growth', 'demon_decay', 'exp_growth', 'exp_decay']
+num_bit_list = ['8 8', '6 6']
+num_grad_bit_list = ['8 8', '6 6']
 prec_scheds = ['fixed']
-num_bit_list = ['6 6', '8 8']
-num_grad_bit_list = ['6 6', '8 8']
 
+model = PTB_LSTM(10000, 800, 800, 0.5)
 
+data = torch.zeros(35, 20, 800).cpu()
+#hidden = (torch.zeros(1, 20, 800).cpu(), torch.zeros(1, 20, 800).cpu())
+flop_obj = FlopCountAnalysis(model, data)
 
-if arch == 'resnet18':
-    model = resnet18()
-elif arch == 'resnet34':
-    model = resnet34()
-else:
-    raise NotImplementedError()
-
-inp = torch.zeros(256, 3, 224, 224).cpu()
-flop_obj = FlopCountAnalysis(model, inp)
+# need to also account for FLOPS not handled by fvcore
 flops = flop_obj.total()
+flops += (2240000 + 6720000 + 4000000 + 1680000 + 560000)
+# addition + sigmoid + tanh + multiply + addition
 
 for num_bits, num_grad_bits in zip(num_bit_list, num_grad_bit_list):
     for sched in prec_scheds:

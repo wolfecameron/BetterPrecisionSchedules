@@ -50,10 +50,12 @@ for nb in nbs:
                         f'--n-layers {layers} --n-hidden {hid} --dropout {dpt} --lr {lr} --lr-schedule {lrs} '
                         f'--n-epochs {epochs} --weight-decay {wd} --eval_every {eval_len} '
                         f'--precision_schedule {ps} --cyclic_num_bits_schedule {nb} '
-                        f'--cyclic_num_grad_bits_schedule {ngbs} --use-wandb --tags {tags} --flip-vertically '
+                        f'--cyclic_num_grad_bits_schedule {ngbs} --tags {tags} --flip-vertically '
                         f'--num_cyclic_period {c} '
                     )
-                    os.system(command + ' > trn_output.txt')
+                    os.system(command)
+                    raise ""
+                    #os.system(command + ' > trn_output.txt')
                     with open('trn_output.txt', 'r') as f:
                         trn_output = f.readlines()
                     final_test_acc = float(trn_output[-3][-6:])

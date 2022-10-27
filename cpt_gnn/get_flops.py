@@ -1,12 +1,13 @@
 import argparse
+import math
 
+import dgl
 import torch
-
-from vanilla_models import (
-    resnet18,
-    resnet34,
-)
+import torch.nn.functional as F
+from ogb.nodeproppred import DglNodePropPredDataset, Evaluator
 from fvcore.nn import FlopCountAnalysis
+
+from models import GCN
 from quant_scheds import (
     calc_cos_decay,
     calc_cos_growth,
@@ -95,31 +96,32 @@ def compute_flops(flops, schedule):
         total_flops += flops * (fw_eflop + bw_eflop)
     return total_flops
 
-arch = 'resnet18'
-num_iter = 5005 * 90
+
+num_iter = 500
 num_cycle = 8
 cycle_len = (num_iter // num_cycle)
 
-#prec_scheds = ['linear_growth', 'linear_decay', 'cos_growth', 'cos_decay', 'demon_growth', 'demon_decay', 'exp_growth', 'exp_decay']
-#num_bit_list = ['4 6', '4 8']
-#num_grad_bit_list = ['6 6', '8 8']
+#num_bit_list = ['3 8', '3 6']
+#num_grad_bit_list = ['8 8', '6 6']
 flips = [True, False]
+#prec_scheds = ['linear_growth', 'linear_decay', 'cos_growth', 'cos_decay', 'demon_growth', 'demon_decay', 'exp_growth', 'exp_decay']
+num_bit_list = ['8 8', '6 6']
+num_grad_bit_list = ['8 8', '6 6']
 prec_scheds = ['fixed']
-num_bit_list = ['6 6', '8 8']
-num_grad_bit_list = ['6 6', '8 8']
 
+#model = PTB_LSTM(10000, 800, 800, 0.5)
+dataset = DglNodePropPredDataset(name='ogbn-arxiv')
+g, _ = dataset[0]
+g = dgl.to_bidirected(g, copy_ndata=True)
+feat = g.ndata['feat']
+feat = (feat - feat.mean(0)) / feat.std(0)
+g.ndata['feat'] = feat
+g = g.cpu()
+model = GCN(g, 128, 512, 40, 2, F.relu, 0.2) 
 
-
-if arch == 'resnet18':
-    model = resnet18()
-elif arch == 'resnet34':
-    model = resnet34()
-else:
-    raise NotImplementedError()
-
-inp = torch.zeros(256, 3, 224, 224).cpu()
-flop_obj = FlopCountAnalysis(model, inp)
+flop_obj = FlopCountAnalysis(model, g.ndata['feat'])
 flops = flop_obj.total()
+# addition + sigmoid + tanh + multiply + addition
 
 for num_bits, num_grad_bits in zip(num_bit_list, num_grad_bit_list):
     for sched in prec_scheds:

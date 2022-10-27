@@ -49,10 +49,12 @@ for nb, ngb in zip(nbs, ngbs):
                         f'--data {data_path} --emsize {emsize} --nhid {nhid} --lr {lr} '
                         f'--clip {clip} --epochs {epochs} --batch_size {bs} --bptt {bptt} '
                         f'--dropout {dpt} --precision_schedule {ps} --cyclic_num_bits_schedule {nb} '
-                        f'--cyclic_num_grad_bits_schedule {ngb} --num_cyclic_period {c} --use-wandb '
+                        f'--cyclic_num_grad_bits_schedule {ngb} --num_cyclic_period {c} '
                         f'--tags {tags} --flip-vertically'
                     )
-                    os.system(command + ' > ptb_sched_output.txt')
+                    os.system(command)
+                    raise ""
+                    #os.system(command + ' > ptb_sched_output.txt')
                     with open('ptb_sched_output.txt', 'r') as f:
                         trn_output = f.readlines()
                     val_ppl = float(trn_output[-2].split(' ')[2])
