@@ -20,7 +20,7 @@ pretrained = False
 
 # quant
 num_bits = ['4 6']
-num_grad_bit = '8 8'
+num_grad_bit = '6 6'
 
 # stuff that changes
 ds = 'imagenet'
