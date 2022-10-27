@@ -5,9 +5,10 @@ import torch
 
 res_base = './quant_results/'
 #exp_name = f'{ds}_{arch}_{ps}_quant_max{max_bit}_{c}_{t}_vertical/'
-base_name = 'imagenet_resnet18'
+#{ds}_{arch}_{lr_sched}_quant_{min_bit}_{max_bit}_{dit}_00
+base_name = 'imagenet_resnet34'
 exclude_str = 'nothing'
-model_name = 'imagenet_resnet18/'
+model_name = 'imagenet_resnet34/'
 file_name = 'best_results.pth'
 
 all_path = [x for x in os.listdir(res_base) if base_name in x and not exclude_str in x]
@@ -37,4 +38,4 @@ for k in sorted(list(all_path_grouped.keys())):
         all_cost.append(res['train_mets'][2])
     all_res = np.array(all_res)
     all_cost = np.array(all_cost)
-    print(f'\n{k} --> {np.mean(all_res):.2f} +- {np.std(all_res):.2f}, {np.mean(all_cost):.4f} +- {np.std(all_cost):.4f}')
+    print(f'{k} --> {np.mean(all_res):.2f} +- {np.std(all_res):.2f}, {np.mean(all_cost):.4f} +- {np.std(all_cost):.4f}')

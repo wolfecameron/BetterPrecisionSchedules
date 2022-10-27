@@ -9,7 +9,7 @@ eval_every = 1
 
 # training
 def_epoch = [25, 50, 75]
-total_epoch = [x + 75 for x in def_epoch]
+total_epoch = [90 for x in def_epoch]
 bs = 256
 lr_sched = 'piecewise-no-def-decay'
 lr = 0.1
@@ -30,7 +30,7 @@ arch = f'resnet18'
 
 # stuff that changes
 for it, dit in zip(total_epoch, def_epoch):
-    exp_name = f'{ds}_{arch}_{lr_sched}_quant_{min_bit}_{max_bit}_{dit}_00'
+    exp_name = f'{ds}_{arch}_{lr_sched}_quant_{min_bit}_{max_bit}_{dit}_01'
     save_dir = os.path.join(base_save_dir, exp_name)
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
