@@ -1,5 +1,6 @@
 from __future__ import print_function
 
+import wandb
 import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
@@ -33,10 +34,10 @@ model_names = sorted(name for name in models.__dict__
                      and callable(models.__dict__[name])
                      )
 
-
 def parse_args():
     parser = argparse.ArgumentParser(
         description='PyTorch CIFAR training with CPT')
+    parser.add_argument('--exp-name', type=str)
     parser.add_argument('--dir', help='annotate the working directory')
     parser.add_argument('--cmd', choices=['train', 'test'], default='train')
     parser.add_argument('--arch', metavar='ARCH', default='cifar10_resnet_38',
@@ -86,10 +87,6 @@ def parse_args():
                         help='num bits for weight and activation')
     parser.add_argument('--num_grad_bits', default=0, type=int,
                         help='num bits for gradient')
-    #parser.add_argument('--num_bits_schedule', default=None, type=int, nargs='*',
-    #                    help='schedule for weight/act precision')
-    #parser.add_argument('--num_grad_bits_schedule', default=None, type=int, nargs='*',
-    #                    help='schedule for grad precision')
 
     parser.add_argument('--is_cyclic_precision', action='store_true',
                         help='cyclic precision schedule')
@@ -105,7 +102,32 @@ def parse_args():
     parser.add_argument('--swa_freq', type=float, default=1170,
                         help='SWA model collection frequency')
     parser.add_argument('--flip-vertically', action='store_true', default=False)
+    parser.add_argument('--use-wandb', action='store_true', default=False)
+    parser.add_argument('--tags', type=str, action='append', default=None)
     args = parser.parse_args()
+
+
+    if args.use_wandb:
+        wandb_run = wandb.init(
+                project="cnn-quant",
+                entity="cameron-research",
+                name=args.exp_name,
+                tags=args.tags
+        )
+        wandb_run.define_metric(
+                name=f'Training Loss',
+                step_metric='Iteration',
+        )
+        wandb_run.define_metric(
+                name=f'Training Accuracy',
+                step_metric='Iteration',
+        )
+        wandb_run.define_metric(
+                name=f'Test Accuracy',
+                step_metric='Iteration',
+        )
+        wandb.config = args.__dict__
+
     return args
 
 
@@ -293,7 +315,17 @@ def run_training(args):
             if (i % args.eval_every == 0 and i > 0) or (i == args.iters):
                 with torch.no_grad():
                     prec1 = validate(args, test_loader, model, criterion, i)
-                
+               
+                # update wandb metrics
+                if args.use_wandb:
+                    wandb.log({
+                        'Training Loss': losses.avg,
+                        'Training Accuracy': top1.avg,
+                        'Test Accuracy': prec1,
+                        'Iteration': i, 
+                    })
+
+
                 is_best = prec1 > best_prec1
                 if is_best:
                     best_prec1 = prec1
@@ -507,11 +539,11 @@ def cyclic_adjust_precision(args, _iter, cyclic_period):
 
 def adjust_learning_rate(args, optimizer, _iter):
     if args.lr_schedule == 'piecewise':
-        if args.warm_up and (_iter < 400):
-            lr = 0.01
-        elif 32000 <= _iter < 48000:
+        first_dec = int(0.5*args.iters)
+        sec_dec = int(0.75*args.iters)
+        if first_dec <= _iter < sec_dec:
             lr = args.lr * (args.step_ratio ** 1)
-        elif _iter >= 48000:
+        elif _iter >= sec_dec:
             lr = args.lr * (args.step_ratio ** 2)
         else:
             lr = args.lr
@@ -521,7 +553,7 @@ def adjust_learning_rate(args, optimizer, _iter):
         lr_ratio = 0.01
         if args.warm_up and (_iter < 400):
             lr = 0.01
-        elif t < 0.5:
+        if t < 0.5:
             lr = args.lr
         elif t < 0.9:
             lr = args.lr * (1 - (1 - lr_ratio) * (t - 0.5) / 0.4)
