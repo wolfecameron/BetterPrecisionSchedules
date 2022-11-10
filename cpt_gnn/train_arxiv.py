@@ -144,7 +144,7 @@ def main():
     elif args.arch == 'gat':
         # TODO: add more layers
         # TODO: add dropout 
-        model = QGAT(n_features, args.n_hidden, n_classes, args.n_heads) 
+        model = QGAT(g, n_features, args.n_hidden, n_classes, args.n_heads).to(device) 
     else:
         raise NotImplementedError()
     vals, tests = [], []

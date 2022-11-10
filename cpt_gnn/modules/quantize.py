@@ -458,12 +458,18 @@ class QGATLayer(nn.Module):
         return {'z': edges.src['z'], 'e': edges.data['e']}
 
     def reduce_func(self, nodes):
-        # TODO: figure out what portions to quantize
+        # norm
         alpha = F.softmax(nodes.mailbox['e'], dim=1)
+        alpha = self.attn_dpt(alpha) # apply dropout to normalized attn coefficients
+
+        # agg
         h = torch.sum(alpha * nodes.mailbox['z'], dim=1)
         return {'h': h}
 
     def forward(self, g, h, num_bits, num_grad_bits):
+        # perform dropout on input of each layer as in paper
+        h = self.inp_dpt(h)
+
         # transform features in low precision using quantized linear layer
         z = self.fc(h, num_bits, num_grad_bits)
         g.ndata['z'] = z
