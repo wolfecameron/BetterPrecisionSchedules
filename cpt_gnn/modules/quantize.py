@@ -430,10 +430,12 @@ class MultiHeadQGATLayer(nn.Module):
 
 
 class QGATLayer(nn.Module):
-    def __init__(self, in_dim, out_dim):
+    def __init__(self, in_dim, out_dim, p=0.6):
         super(QGATLayer, self).__init__()
         self.fc = nn.Linear(in_dim, out_dim, bias=False)
         self.attn_fc = nn.Linear(2 * out_dim, 1, bias=False)
+        self.inp_dpt = nn.Dropout(p=p)
+        self.attn_dpt = nn.Dropout(p=p)
         self.reset_parameters()
 
     def reset_parameters(self):
