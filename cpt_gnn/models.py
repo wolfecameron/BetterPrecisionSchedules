@@ -61,13 +61,14 @@ class QGCN(nn.Module):
         return h
 
 class QGAT(nn.Module):
-    def __init__(self, in_dim, hidden_dim, out_dim, num_heads):
+    def __init__(self, g, in_dim, hidden_dim, out_dim, num_heads):
         super(QGAT, self).__init__()
+        self.g = g
         self.layer1 = MultiHeadQGATLayer(in_dim, hidden_dim, num_heads)
         self.layer2 = MultiHeadQGATLayer(hidden_dim * num_heads, out_dim, 1)
 
-    def forward(self, g, h, num_bits, num_grad_bits):
-        h = self.layer1(g, h, num_bits, num_grad_bits)
+    def forward(self, h, num_bits, num_grad_bits):
+        h = self.layer1(self.g, h, num_bits, num_grad_bits)
         h = F.elu(h)
-        h = self.layer2(g, h, num_bits, num_grad_bits)
+        h = self.layer2(self.g, h, num_bits, num_grad_bits)
         return h
