@@ -85,6 +85,10 @@ def main():
                         help='number of cyclic period for precision, same for weights/activation and gradients')
     parser.add_argument('--flip-vertically', action='store_true', default=False)
     
+    # GNN-specific cpt params
+    parser.add_argument('--quant-norm', action='store_true', default=False)
+    parser.add_argument('--quant-agg', action='store_true', default=False)
+
     # these are updated by the scheduling code
     parser.add_argument('--num_bits', default=0, type=int,
                         help='num bits for weight and activation')
@@ -109,19 +113,7 @@ def main():
                 name=f'Validation Accuracy',
                 step_metric='Epoch',
         )
-        wandb.config = {
-            'n_layers': args.n_layers,
-            'n_hidden': args.n_hidden,
-            'lr': args.lr,
-            'dropout': args.dropout,
-            'n_epochs': args.n_epochs,
-            'weight_decay': args.weight_decay,
-            'precision_schedule': args.precision_schedule,
-            'cyclic_num_bits_schedule': args.cyclic_num_bits_schedule,
-            'cyclic_num_grad_bits_schedule': args.cyclic_num_grad_bits_schedule,
-            'num_cyclic_period': args.num_cyclic_period,
-            'flip_vertically': args.flip_vertically,
-        }
+        wandb.config = args.__dict__
 
     device = f'cuda:{args.gpu}' if torch.cuda.is_available() else 'cpu'
     device = torch.device(device)
@@ -143,10 +135,9 @@ def main():
     g = g.to(device)
     n_features = feat.size()[-1]
     n_classes = dataset.num_classes
-    print(n_features, args.n_hidden, n_classes, args.n_layers, args.dropout)
     model = QGCN(g, n_features, args.n_hidden, n_classes, args.n_layers,
-            F.relu, args.dropout).to(device)
-    raise ""
+            F.relu, args.dropout, quant_norm=args.quant_norm,
+            quant_agg=args.quant_agg).to(device)
     vals, tests = [], []
     optimizer = torch.optim.Adam(
             model.parameters(), lr=args.lr, weight_decay=args.weight_decay)

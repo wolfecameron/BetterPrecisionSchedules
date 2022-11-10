@@ -194,7 +194,8 @@ class QuantMeasure(nn.Module):
 
 class QGraphConv(nn.Module):
     def __init__(self, in_feats, out_feats, norm='both', weight=True, bias=True,
-            activation=None, allow_zero_in_degree=False):
+            activation=None, allow_zero_in_degree=False, quant_norm=False,
+            quant_agg=False):
         super(QGraphConv, self).__init__()
         if norm not in ('none', 'both', 'right', 'left'):
             raise DGLError('Invalid norm value. Must be either "none", "both", "right" or "left".'
@@ -203,6 +204,8 @@ class QGraphConv(nn.Module):
         self._out_feats = out_feats
         self._norm = norm
         self._allow_zero_in_degree = allow_zero_in_degree
+        self.quant_norm = quant_norm
+        self.quant_agg = quant_agg
 
         # two main parameters being used are weight and bias
         if weight:
@@ -256,8 +259,7 @@ class QGraphConv(nn.Module):
             #        flatten_dims=None, reduce_dim=None, reduce_type='extreme')
             #qfeat_src = quantize(feat_src, qparams=feat_qparams)
 
-            # normalize by the out degree in full precision
-            # TODO: should we quantize this pointwise degree normalization operation?
+            # normalize by the out degree
             if self._norm in ['left', 'both']:
                 degs = graph.out_degrees().float().clamp(min=1)
                 if self._norm == 'both':
@@ -266,7 +268,24 @@ class QGraphConv(nn.Module):
                     norm = 1.0 / degs
                 shp = norm.shape + (1,) * (feat_src.dim() - 1)
                 norm = torch.reshape(norm, shp)
-                feat_src = feat_src * norm
+
+                if self.quant_norm:
+                    # quantize the norm vector
+                    norm_qparams = calculate_qparams(norm, num_bits=num_bits,
+                            flatten_dims=None, reduce_dim=None, reduce_type='mean')
+                    qnorm = quantize(norm, qparams=norm_qparams)
+
+                    # quantize the features
+                    feat_qparams = calculate_qparams(feat_src, num_bits=num_bits,
+                            flatten_dims=None, reduce_dim=None, reduce_type='extreme')
+                    qfeat_src = quantize(feat_src,  qparams=feat_qparams)
+                    
+                    # normalize in low precision
+                    feat_src = qfeat_src * qnorm
+                    feat_src = quantize_grad(feat_src, num_bits=num_grad_bits, flatten_dims=None)
+                
+                else:
+                    feat_src = feat_src * norm
 
             if weight is not None:
                 if self.weight is not None:
@@ -290,15 +309,39 @@ class QGraphConv(nn.Module):
                     qfeat_src = torch.matmul(qfeat_src, qweight)
                 qfeat_src = quantize_grad(qfeat_src, num_bits=num_grad_bits, flatten_dims=None)
 
-                # aggregate at full precision
-                graph.srcdata['h'] = qfeat_src
-                graph.update_all(aggregate_fn, fn.sum(msg='m', out='h'))
-                qrst = graph.dstdata['h']
+                # aggregate node features
+                if self.quant_agg:
+                    # quantize the features
+                    feat_qparams = calculate_qparams(qfeat_src, num_bits=num_bits,
+                            flatten_dims=None, reduce_dim=None, reduce_type='extreme')
+                    qfeat_src = quantize(qfeat_src, qparams=feat_qparams)
+
+                    # aggregate low precision features
+                    graph.srcdata['h'] = qfeat_src
+                    graph.update_all(aggregate_fn, fn.sum(msg='m', out='h'))
+                    qrst = graph.dstdata['h']
+                    qrst = quantize_grad(qrst, num_bits=num_grad_bits, flatten_dims=None)
+                else:
+                    graph.srcdata['h'] = qfeat_src
+                    graph.update_all(aggregate_fn, fn.sum(msg='m', out='h'))
+                    qrst = graph.dstdata['h']
             else:
-                # aggregate at full precision
-                graph.srcdata['h'] = feat_src
-                graph.update_all(aggregate_fn, fn.sum(msg='m', out='h'))
-                rst = graph.dstdata['h']
+                # aggregate node features
+                if self.quant_agg:
+                    # quantize the features
+                    feat_qparams = calculate_qparams(feat_src, num_bits=num_bits,
+                            flatten_dims=None, reduce_dim=None, reduce_type='extreme')
+                    qfeat_src = quantize(feat_src, qparams=feat_qparams)
+
+                    # aggregate low precision features
+                    graph.srcdata['h'] = qfeat_src
+                    graph.update_all(aggregate_fn, fn.sum(msg='m', out='h'))
+                    rst = graph.dstdata['h']
+                    rst = quantize_grad(rst, num_bits=num_grad_bits, flatten_dims=None)
+                else:
+                    graph.srcdata['h'] = feat_src
+                    graph.update_all(aggregate_fn, fn.sum(msg='m', out='h'))
+                    rst = graph.dstdata['h']
 
                 # quantized matrix multiplication of features
                 rst_qparams = calculate_qparams(rst, num_bits=num_bits,
@@ -317,7 +360,23 @@ class QGraphConv(nn.Module):
                     norm = 1.0 / degs
                 shp = norm.shape + (1,) * (feat_dst.dim() - 1)
                 norm = torch.reshape(norm, shp)
-                qrst = qrst * norm
+
+                if self.quant_norm:
+                    # quantize the norm vector
+                    norm_qparams = calculate_qparams(norm, num_bits=num_bits,
+                            flatten_dims=None, reduce_dim=None, reduce_type='mean')
+                    qnorm = quantize(norm, qparams=norm_qparams)
+
+                    # quantize the features
+                    rst_qparams = calculate_qparams(qrst, num_bits=num_bits,
+                            flatten_dims=None, reduce_dim=None, reduce_type='extreme')
+                    qrst = quantize(qrst, qparams=rst_qparams)
+                    
+                    # normalize in low precision
+                    qrst = qrst * qnorm
+                    qrst = quantize_grad(qrst, num_bits=num_grad_bits, flatten_dims=None)
+                else:
+                    qrst = qrst * norm
 
             # quantized addition of the bias 
             if self.bias is not None:
@@ -335,7 +394,6 @@ class QGraphConv(nn.Module):
                 qrst = qrst + qbias
                 qrst = quantize_grad(qrst, num_bits=num_grad_bits, flatten_dims=None)
 
-            # apply activation in full precision
             if self._activation is not None:
                 qrst = self._activation(qrst)
 
