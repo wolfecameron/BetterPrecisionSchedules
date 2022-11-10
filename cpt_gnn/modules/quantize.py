@@ -432,9 +432,13 @@ class MultiHeadQGATLayer(nn.Module):
 class QGATLayer(nn.Module):
     def __init__(self, in_dim, out_dim):
         super(QGATLayer, self).__init__()
-        self.fc = nn.Linear(in_dim, out_dim, bias=False)
-        self.attn_fc = nn.Linear(2 * out_dim, 1, bias=False)
+        self.fc = QLinear(in_dim, out_dim, bias=False)
+        self.attn_fc = QLinear(2 * out_dim, 1, bias=False)
         self.reset_parameters()
+
+        # used for reference when applying edge functions
+        self.num_bits = 8
+        self.num_grad_bits = 8
 
     def reset_parameters(self):
         """Reinitialize learnable parameters."""
@@ -443,9 +447,8 @@ class QGATLayer(nn.Module):
         nn.init.xavier_normal_(self.attn_fc.weight, gain=gain)
 
     def edge_attention(self, edges):
-        # edge UDF for equation (2)
         z2 = torch.cat([edges.src['z'], edges.dst['z']], dim=1)
-        a = self.attn_fc(z2)
+        a = self.attn_fc(z2, self.num_bits, self.num_grad_bits)
         return {'e': F.leaky_relu(a)}
 
     def message_func(self, edges):
@@ -453,22 +456,52 @@ class QGATLayer(nn.Module):
         return {'z': edges.src['z'], 'e': edges.data['e']}
 
     def reduce_func(self, nodes):
-        # reduce UDF for equation (3) & (4)
-        # equation (3)
+        # TODO: figure out what portions to quantize
         alpha = F.softmax(nodes.mailbox['e'], dim=1)
-        # equation (4)
         h = torch.sum(alpha * nodes.mailbox['z'], dim=1)
         return {'h': h}
 
     def forward(self, g, h, num_bits, num_grad_bits):
-        # equation (1)
-        z = self.fc(h)
+        # transform features in low precision using quantized linear layer
+        z = self.fc(h, num_bits, num_grad_bits)
         g.ndata['z'] = z
-        # equation (2)
+
+        # compute the unnormalized attention score in low precision
+        self.num_bits = num_bits
+        self.num_grad_bits = num_grad_bits
         g.apply_edges(self.edge_attention)
-        # equation (3) & (4)
+        
+        # apply softmax and aggregate features
         g.update_all(self.message_func, self.reduce_func)
         return g.ndata.pop('h')
+
+class QLinear(nn.Linear):
+    def __init__(self, in_features, out_features, bias=True, device=None, dtype=None):
+        super(QLinear, self).__init__(in_features, out_features, bias, device, dtype)
+
+    def forward(self, x, num_bits, num_grad_bits):
+        # quantize the input
+        x_qparams = calculate_qparams(x, num_bits=num_bits, 
+                flatten_dims=None, reduce_dim=None, reduce_type='extreme')
+        qx = quantize(x, qparams=x_qparams)
+
+        # quantize the weights
+        weight_qparam = calculate_qparams(self.weight, num_bits=num_bits, flatten_dims=None,
+                reduce_dim=None, reduce_type='mean')
+        qweight = quantize(self.weight, qparams=weight_qparam)
+
+        # quantize the bias
+        if self.bias is not None:
+            bias_qparam = calculate_qparams(self.bias, num_bits=num_bits, flatten_dims=None,
+                    reduce_dim=None, reduce_type='mean')
+            qbias = quantize(self.bias, qparams=bias_qparam)
+        else:
+            qbias = None
+
+        # run quantized forward pass
+        output = F.linear(qx, qweight, qbias)
+        output = quantize_grad(output, num_bits=num_grad_bits, flatten_dims=None)
+        return output
 
 
 if __name__ == '__main__':
