@@ -278,7 +278,7 @@ class QGraphConv(nn.Module):
                     # quantize the features
                     feat_qparams = calculate_qparams(feat_src, num_bits=num_bits,
                             flatten_dims=None, reduce_dim=None, reduce_type='extreme')
-                    qfeat_src = quantize(feat_src, feat_qparams)
+                    qfeat_src = quantize(feat_src,  qparams=feat_qparams)
                     
                     # normalize in low precision
                     feat_src = qfeat_src * qnorm
@@ -370,7 +370,7 @@ class QGraphConv(nn.Module):
                     # quantize the features
                     rst_qparams = calculate_qparams(qrst, num_bits=num_bits,
                             flatten_dims=None, reduce_dim=None, reduce_type='extreme')
-                    qrst = quantize(qrst, rst_qparams)
+                    qrst = quantize(qrst, qparams=rst_qparams)
                     
                     # normalize in low precision
                     qrst = qrst * qnorm

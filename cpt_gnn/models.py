@@ -34,16 +34,20 @@ class GCN(nn.Module):
 
 class QGCN(nn.Module):
     def __init__(self, g, in_feats, n_hidden, n_classes, n_layers, activation,
-            dropout, use_layernorm=True):
+            dropout, use_layernorm=True, quant_norm=False, quant_agg=False):
         super().__init__()
         self.g = g
         self.layers = nn.ModuleList()
         self.use_layernorm = use_layernorm
 
-        self.layers.append(QGraphConv(in_feats, n_hidden, activation=activation))   
+        # for now -- we apply quantization to all layers
+        self.layers.append(QGraphConv(in_feats, n_hidden, activation=activation,
+                quant_norm=quant_norm, quant_agg=quant_agg))   
         for i in range(n_layers - 1):
-            self.layers.append(QGraphConv(n_hidden, n_hidden, activation=activation))
-        self.layers.append(QGraphConv(n_hidden, n_classes))
+            self.layers.append(QGraphConv(n_hidden, n_hidden, activation=activation,
+                    quant_norm=quant_norm, quant_agg=quant_agg))
+        self.layers.append(QGraphConv(n_hidden, n_classes,
+                quant_norm=quant_norm, quant_agg=quant_agg))
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, features, num_bits, num_grad_bits):
