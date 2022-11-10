@@ -6,7 +6,7 @@ import wandb
 import torch
 import torch.nn.functional as F
 
-from models import QGCN
+from models import QGCN, QGAT
 
 from ogb.nodeproppred import DglNodePropPredDataset, Evaluator
 import dgl
@@ -59,10 +59,12 @@ def main():
     parser = argparse.ArgumentParser(description='OGBN-Arxiv (GNN)')
     parser.add_argument('--exp-name', type=str, default='gnn_quant_00')
     parser.add_argument("--gpu", type=int, default=0, help="gpu")
+    parser.add_argument('--arch', type=str, default='gnn', choices=['gnn', 'gat'])
     parser.add_argument("--n-layers", type=int, default=3,
                         help="number of hidden gcn layers")
     parser.add_argument("--n-hidden", type=int, default=128,
                         help="number of hidden gcn units")
+    parser.add_argument('--n-heads', type=int, default=8)
     parser.add_argument('--dropout', type=float, default=0.5)
     parser.add_argument('--lr', type=float, default=0.01)
     parser.add_argument('--lr-schedule', type=str, default='fixed')
@@ -135,9 +137,16 @@ def main():
     g = g.to(device)
     n_features = feat.size()[-1]
     n_classes = dataset.num_classes
-    model = QGCN(g, n_features, args.n_hidden, n_classes, args.n_layers,
-            F.relu, args.dropout, quant_norm=args.quant_norm,
-            quant_agg=args.quant_agg).to(device)
+    if args.arch == 'gnn':
+        model = QGCN(g, n_features, args.n_hidden, n_classes, args.n_layers,
+                F.relu, args.dropout, quant_norm=args.quant_norm,
+                quant_agg=args.quant_agg).to(device)
+    elif args.arch == 'gat':
+        # TODO: add more layers
+        # TODO: add dropout 
+        model = QGAT(n_features, args.n_hidden, n_classes, args.n_heads) 
+    else:
+        raise NotImplementedError()
     vals, tests = [], []
     optimizer = torch.optim.Adam(
             model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
