@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from dgl.nn.pytorch import GraphConv
 
-from modules.quantize import QGraphConv
+from modules.quantize import QGraphConv, MultiHeadQGATLayer
 
 class GCN(nn.Module):
     def __init__(self, g, in_feats, n_hidden, n_classes, n_layers, activation,
@@ -58,4 +58,16 @@ class QGCN(nn.Module):
             h = layer(self.g, h, num_bits, num_grad_bits)
             if i < len(self.layers) - 1 and self.use_layernorm:
                 h = F.layer_norm(h, h.shape) # perform layernorm in full precision
+        return h
+
+class QGAT(nn.Module):
+    def __init__(self, in_dim, hidden_dim, out_dim, num_heads):
+        super(QGAT, self).__init__()
+        self.layer1 = MultiHeadQGATLayer(in_dim, hidden_dim, num_heads)
+        self.layer2 = MultiHeadQGATLayer(hidden_dim * num_heads, out_dim, 1)
+
+    def forward(self, g, h, num_bits, num_grad_bits):
+        h = self.layer1(g, h, num_bits, num_grad_bits)
+        h = F.elu(h)
+        h = self.layer2(g, h, num_bits, num_grad_bits)
         return h
