@@ -23,8 +23,9 @@ num_bits = ['3 8']
 num_grad_bit = '8 8'
 
 # stuff that changes
-datasets = ['cifar10', 'cifar100']
-prec_scheds = ['demon_decay', 'demon_growth', 'exp_decay', 'exp_growth', 'linear_decay', 'linear_growth', 'cos_decay', 'cos_growth']
+datasets = ['cifar10']
+#prec_scheds = ['demon_decay', 'demon_growth', 'exp_decay', 'exp_growth', 'linear_decay', 'linear_growth', 'cos_decay', 'cos_growth']
+prec_scheds = ['exp_decay', 'exp_growth']
 cycles = [8]
 
 for ds in datasets:
@@ -51,7 +52,6 @@ for ds in datasets:
                         if pretrained:
                             command += ' --pretrained'
                         os.system(command)
-                        raise ""
 
                         exp_name = f'{ds}_{arch}_{ps}_quant_max{max_bit}_{c}_{t}_horizontal/'
                         save_dir = os.path.join(base_save_dir, exp_name)

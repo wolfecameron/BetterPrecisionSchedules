@@ -412,11 +412,14 @@ class QGraphConv(nn.Module):
 
 
 class MultiHeadQGATLayer(nn.Module):
-    def __init__(self, in_dim, out_dim, num_heads, merge='cat'):
+    def __init__(self, in_dim, out_dim, num_heads, merge='cat', p=0.6, quant_agg=False):
         super(MultiHeadQGATLayer, self).__init__()
         self.heads = nn.ModuleList()
         for i in range(num_heads):
-            self.heads.append(QGATLayer(in_dim, out_dim))
+            if merge == 'cat':
+                self.heads.append(QGATLayer(in_dim, out_dim // num_heads, p=p, quant_agg=quant_agg))
+            else:
+                self.heads.append(QGATLayer(in_dim, out_dim, p=p, quant_agg=quant_agg))
         self.merge = merge
 
     def forward(self, g, h, num_bits, num_grad_bits):
@@ -430,12 +433,13 @@ class MultiHeadQGATLayer(nn.Module):
 
 
 class QGATLayer(nn.Module):
-    def __init__(self, in_dim, out_dim, p=0.6):
+    def __init__(self, in_dim, out_dim, p=0.6, quant_agg=False):
         super(QGATLayer, self).__init__()
         self.fc = QLinear(in_dim, out_dim, bias=False)
         self.attn_fc = QLinear(2 * out_dim, 1, bias=False)
         self.inp_dpt = nn.Dropout(p=p)
         self.attn_dpt = nn.Dropout(p=p)
+        self.quant_agg = quant_agg
         self.reset_parameters()
 
         # used for reference when applying edge functions
@@ -443,7 +447,6 @@ class QGATLayer(nn.Module):
         self.num_grad_bits = 8
 
     def reset_parameters(self):
-        """Reinitialize learnable parameters."""
         gain = nn.init.calculate_gain('relu')
         nn.init.xavier_normal_(self.fc.weight, gain=gain)
         nn.init.xavier_normal_(self.attn_fc.weight, gain=gain)
@@ -454,17 +457,43 @@ class QGATLayer(nn.Module):
         return {'e': F.leaky_relu(a)}
 
     def message_func(self, edges):
-        # message UDF for equation (3) & (4)
         return {'z': edges.src['z'], 'e': edges.data['e']}
 
     def reduce_func(self, nodes):
-        # norm
         alpha = F.softmax(nodes.mailbox['e'], dim=1)
         alpha = self.attn_dpt(alpha) # apply dropout to normalized attn coefficients
 
-        # agg
-        h = torch.sum(alpha * nodes.mailbox['z'], dim=1)
-        return {'h': h}
+        if self.quant_agg:
+            # quantize the neighborhood features
+            neigh_feats = torch.squeeze(nodes.mailbox['z'], dim=1)
+            feat_qparams = calculate_qparams(neigh_feats, num_bits=self.num_bits,
+                    flatten_dims=None, reduce_dim=None, reduce_type='extreme')
+            qneigh_feats = quantize(neigh_feats, qparams=feat_qparams)
+            qneigh_feats = qneigh_feats[:, None, :]
+
+            # quantize the attention values
+            alpha = torch.squeeze(alpha)
+            alpha_qparams = calculate_qparams(alpha, num_bits=self.num_bits,
+                    flatten_dims=None, reduce_dim=None, reduce_type='mean')
+            qalpha = quantize(alpha, qparams=alpha_qparams)
+            qalpha = qalpha[:, None, None]
+
+            # multiply features by the attention scores
+            qh = qalpha * qneigh_feats
+            qh = quantize_grad(qh, num_bits=self.num_grad_bits, flatten_dims=None)
+            
+
+            # quantize the scaled features
+            qh = torch.squeeze(qh, dim=1)
+            h_qparams = calculate_qparams(qh, num_bits=self.num_bits,
+                    flatten_dims=None, reduce_dim=None, reduce_type='extreme')
+            qh = quantize(qh, qparams=h_qparams)
+            qh = qh[:, None, :]
+            qh = torch.sum(qh, dim=1)
+            return {'h': h}
+        else:
+            h = torch.sum(alpha * nodes.mailbox['z'], dim=1)
+            return {'h': h}
 
     def forward(self, g, h, num_bits, num_grad_bits):
         # perform dropout on input of each layer as in paper
@@ -481,7 +510,9 @@ class QGATLayer(nn.Module):
         
         # apply softmax and aggregate features
         g.update_all(self.message_func, self.reduce_func)
-        return g.ndata.pop('h')
+        qres = g.ndata.pop('h')
+        qres = quantize_grad(qres, num_bits=num_grad_bits, flatten_dims=None)
+        return qres
 
 class QLinear(nn.Linear):
     def __init__(self, in_features, out_features, bias=True, device=None, dtype=None):

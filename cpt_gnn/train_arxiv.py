@@ -142,9 +142,8 @@ def main():
                 F.relu, args.dropout, quant_norm=args.quant_norm,
                 quant_agg=args.quant_agg).to(device)
     elif args.arch == 'gat':
-        # TODO: add more layers
-        # TODO: add dropout 
-        model = QGAT(g, n_features, args.n_hidden, n_classes, args.n_heads).to(device) 
+        model = QGAT(g, n_features, args.n_hidden, n_classes, args.n_heads,
+                args.dropout, quant_agg=args.quant_agg).to(device) 
     else:
         raise NotImplementedError()
     vals, tests = [], []

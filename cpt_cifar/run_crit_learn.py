@@ -9,8 +9,8 @@ eval_every = 390
 trials = 2
 
 # training
-def_iters = [8000, 16000, 24000, 32000, 40000, 48000, 56000, 64000]
-iters = [x + 64000 for x in def_iters]
+def_iters = [32000, 64000, 96000, 128000]
+iters = [x + 256000 for x in def_iters]
 bs = 128
 lr_sched = 'piecewise'
 dataset = 'cifar10'
@@ -21,7 +21,7 @@ warm_up = False
 pretrained = False
 
 # quant
-num_bits = '2 8'
+num_bits = '3 8'
 num_grad_bit = '8 8'
 
 # stuff that changes
