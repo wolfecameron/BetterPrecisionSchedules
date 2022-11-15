@@ -90,6 +90,8 @@ def main():
     # GNN-specific cpt params
     parser.add_argument('--quant-norm', action='store_true', default=False)
     parser.add_argument('--quant-agg', action='store_true', default=False)
+    parser.add_argument('--dpt-inp', action='store_true', default=False)
+    parser.add_argument('--dpt-attn', action='store_true', default=False)
 
     # these are updated by the scheduling code
     parser.add_argument('--num_bits', default=0, type=int,
@@ -143,7 +145,8 @@ def main():
                 quant_agg=args.quant_agg).to(device)
     elif args.arch == 'gat':
         model = QGAT(g, n_features, args.n_hidden, n_classes, args.n_heads,
-                args.dropout, quant_agg=args.quant_agg).to(device) 
+                args.dropout, quant_agg=args.quant_agg, dpt_inp=args.dpt_inp,
+                dpt_attn=args.dpt_attn).to(device) 
     else:
         raise NotImplementedError()
     vals, tests = [], []

@@ -60,15 +60,33 @@ class QGCN(nn.Module):
                 h = F.layer_norm(h, h.shape) # perform layernorm in full precision
         return h
 
+class GATPlus(nn.Module):
+    def __init__(self, g, in_dim, hidden_dim, out_dim, num_heads, p=0.6,
+            quant_agg=False, dpt_inp=False, dpt_attn=False, use_layer_norm=False,
+            use_res_conn=False, norm_attn=False, project_attn=False, use_classif_layer=False):
+        super().__init__()
+        self.g = g
+        self.layer1 = MultiHeadQGATLayer(in_dim, hidden_dim, num_heads, p=p,
+                quant_agg=quant_agg, dpt_inp=dpt_inp, dpt_attn=dpt_attn)
+        self.layer2 = MultiHeadQGATLayer(hidden_dim, out_dim, 1, p=p,
+                quant_agg=quant_agg, dpt_inp=dpt_inp, dpt_attn=dpt_attn)
+
+    def forward(self, h, num_bits, num_grad_bits):
+        h = self.layer1(self.g, h, num_bits, num_grad_bits)
+        h = F.elu(h)
+        h = self.layer2(self.g, h, num_bits, num_grad_bits)
+        return h
+    
+
 class QGAT(nn.Module):
     def __init__(self, g, in_dim, hidden_dim, out_dim, num_heads, p=0.6,
-            quant_agg=False):
+            quant_agg=False, dpt_inp=False, dpt_attn=False):
         super(QGAT, self).__init__()
         self.g = g
         self.layer1 = MultiHeadQGATLayer(in_dim, hidden_dim, num_heads, p=p,
-                quant_agg=quant_agg)
+                quant_agg=quant_agg, dpt_inp=dpt_inp, dpt_attn=dpt_attn)
         self.layer2 = MultiHeadQGATLayer(hidden_dim, out_dim, 1, p=p,
-                quant_agg=quant_agg)
+                quant_agg=quant_agg, dpt_inp=dpt_inp, dpt_attn=dpt_attn)
 
     def forward(self, h, num_bits, num_grad_bits):
         h = self.layer1(self.g, h, num_bits, num_grad_bits)

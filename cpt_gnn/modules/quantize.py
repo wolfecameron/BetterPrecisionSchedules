@@ -412,14 +412,20 @@ class QGraphConv(nn.Module):
 
 
 class MultiHeadQGATLayer(nn.Module):
-    def __init__(self, in_dim, out_dim, num_heads, merge='cat', p=0.6, quant_agg=False):
+    def __init__(self, in_dim, out_dim, num_heads, merge='cat', p=0.6, quant_agg=False,
+            dpt_inp=False, dpt_attn=False, use_layer_norm=False, use_res_conn=False,
+            norm_attn=False):
         super(MultiHeadQGATLayer, self).__init__()
         self.heads = nn.ModuleList()
         for i in range(num_heads):
             if merge == 'cat':
-                self.heads.append(QGATLayer(in_dim, out_dim // num_heads, p=p, quant_agg=quant_agg))
+                self.heads.append(QGATLayer(in_dim, out_dim // num_heads, p=p, quant_agg=quant_agg,
+                        dpt_inp=dpt_inp, dpt_attn=dpt_attn, use_layer_norm=use_layer_norm,
+                        use_res_conn=use_res_conn, norm_attn=norm_attn))
             else:
-                self.heads.append(QGATLayer(in_dim, out_dim, p=p, quant_agg=quant_agg))
+                self.heads.append(QGATLayer(in_dim, out_dim, p=p, quant_agg=quant_agg,
+                        dpt_inp=dpt_inp, dpt_attn=dpt_attn, use_layer_norm=use_layer_norm,
+                        use_res_conn=use_res_conn))
         self.merge = merge
 
     def forward(self, g, h, num_bits, num_grad_bits):
@@ -433,13 +439,16 @@ class MultiHeadQGATLayer(nn.Module):
 
 
 class QGATLayer(nn.Module):
-    def __init__(self, in_dim, out_dim, p=0.6, quant_agg=False):
+    def __init__(self, in_dim, out_dim, p=0.6, quant_agg=False, dpt_inp=False,
+            dpt_attn=False, use_layer_norm=False, usse_res_conn=False, norm_attn=False):
         super(QGATLayer, self).__init__()
-        self.fc = QLinear(in_dim, out_dim, bias=False)
-        self.attn_fc = QLinear(2 * out_dim, 1, bias=False)
+        self.fc = nn.Linear(in_dim, out_dim, bias=False)
+        self.attn_fc = nn.Linear(2 * out_dim, 1, bias=False)
         self.inp_dpt = nn.Dropout(p=p)
         self.attn_dpt = nn.Dropout(p=p)
         self.quant_agg = quant_agg
+        self.dpt_inp = dpt_inp
+        self.dpt_attn = dpt_attn
         self.reset_parameters()
 
         # used for reference when applying edge functions
@@ -453,7 +462,7 @@ class QGATLayer(nn.Module):
 
     def edge_attention(self, edges):
         z2 = torch.cat([edges.src['z'], edges.dst['z']], dim=1)
-        a = self.attn_fc(z2, self.num_bits, self.num_grad_bits)
+        a = self.attn_fc(z2) #self.attn_fc(z2, self.num_bits, self.num_grad_bits)
         return {'e': F.leaky_relu(a)}
 
     def message_func(self, edges):
@@ -461,9 +470,11 @@ class QGATLayer(nn.Module):
 
     def reduce_func(self, nodes):
         alpha = F.softmax(nodes.mailbox['e'], dim=1)
-        alpha = self.attn_dpt(alpha) # apply dropout to normalized attn coefficients
+        if self.dpt_attn:
+            alpha = self.attn_dpt(alpha) # apply dropout to normalized attn coefficients
 
         if self.quant_agg:
+            raise ""
             # quantize the neighborhood features
             neigh_feats = torch.squeeze(nodes.mailbox['z'], dim=1)
             feat_qparams = calculate_qparams(neigh_feats, num_bits=self.num_bits,
@@ -497,10 +508,11 @@ class QGATLayer(nn.Module):
 
     def forward(self, g, h, num_bits, num_grad_bits):
         # perform dropout on input of each layer as in paper
-        h = self.inp_dpt(h)
+        if self.dpt_inp:
+            h = self.inp_dpt(h)
 
         # transform features in low precision using quantized linear layer
-        z = self.fc(h, num_bits, num_grad_bits)
+        z = self.fc(h) #self.fc(h, num_bits, num_grad_bits)
         g.ndata['z'] = z
 
         # compute the unnormalized attention score in low precision
@@ -511,7 +523,7 @@ class QGATLayer(nn.Module):
         # apply softmax and aggregate features
         g.update_all(self.message_func, self.reduce_func)
         qres = g.ndata.pop('h')
-        qres = quantize_grad(qres, num_bits=num_grad_bits, flatten_dims=None)
+        #qres = quantize_grad(qres, num_bits=num_grad_bits, flatten_dims=None)
         return qres
 
 class QLinear(nn.Linear):
@@ -541,10 +553,3 @@ class QLinear(nn.Linear):
         output = F.linear(qx, qweight, qbias)
         output = quantize_grad(output, num_bits=num_grad_bits, flatten_dims=None)
         return output
-
-
-if __name__ == '__main__':
-    x = torch.rand(2, 3)
-    x_q = quantize(x, flatten_dims=(-1), num_bits=8, dequantize=True)
-    print(x)
-    print(x_q)
