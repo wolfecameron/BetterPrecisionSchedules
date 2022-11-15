@@ -425,14 +425,19 @@ class MultiHeadQGATLayer(nn.Module):
             else:
                 self.heads.append(QGATLayer(in_dim, out_dim, p=p, quant_agg=quant_agg,
                         dpt_inp=dpt_inp, dpt_attn=dpt_attn, use_layer_norm=use_layer_norm,
-                        use_res_conn=use_res_conn))
+                        use_res_conn=use_res_conn, norm_attn=norm_attn))
         self.merge = merge
+        if self.merge == 'proj':
+            self.head_proj = nn.Linear(out_dim * num_heads, out_dim, bias=False)
 
     def forward(self, g, h, num_bits, num_grad_bits):
         head_outs = [attn_head(g, h, num_bits, num_grad_bits) for attn_head in self.heads]
         if self.merge == 'cat':
             # concat on the output feature dimension (dim=1)
             return torch.cat(head_outs, dim=1)
+        elif self.merge == 'proj':
+            # concatenate head output then project to prior dimension
+            return self.head_proj(torch.cat(head_outs, dim=1))
         else:
             # merge using average
             return torch.mean(torch.stack(head_outs))
@@ -440,20 +445,35 @@ class MultiHeadQGATLayer(nn.Module):
 
 class QGATLayer(nn.Module):
     def __init__(self, in_dim, out_dim, p=0.6, quant_agg=False, dpt_inp=False,
-            dpt_attn=False, use_layer_norm=False, usse_res_conn=False, norm_attn=False):
+            dpt_attn=False, use_layer_norm=False, use_res_conn=False, norm_attn=False):
         super(QGATLayer, self).__init__()
+        
+        # attention and linear transformation layers
         self.fc = nn.Linear(in_dim, out_dim, bias=False)
         self.attn_fc = nn.Linear(2 * out_dim, 1, bias=False)
-        self.inp_dpt = nn.Dropout(p=p)
-        self.attn_dpt = nn.Dropout(p=p)
-        self.quant_agg = quant_agg
+        
+        # dropout settings
         self.dpt_inp = dpt_inp
         self.dpt_attn = dpt_attn
-        self.reset_parameters()
+        if self.dpt_inp:
+            self.inp_dpt = nn.Dropout(p=p)
+        if self.dpt_attn:
+            self.attn_dpt = nn.Dropout(p=p)
+        
+        # normalization settings
+        self.use_layer_norm = use_layer_norm
+        if self.use_layer_norm:
+            self.proj_norm = nn.LayerNorm(out_dim)
+            self.agg_norm = nn.LayerNorm(out_dim)
+        self.use_res_conn = use_res_conn
+        self.norm_attn = norm_attn
 
-        # used for reference when applying edge functions
-        self.num_bits = 8
+        # CPT stuff
+        self.quant_agg = quant_agg
+        self.num_bits = 8 # reference during aggregation/attention
         self.num_grad_bits = 8
+        
+        self.reset_parameters()
 
     def reset_parameters(self):
         gain = nn.init.calculate_gain('relu')
@@ -463,6 +483,9 @@ class QGATLayer(nn.Module):
     def edge_attention(self, edges):
         z2 = torch.cat([edges.src['z'], edges.dst['z']], dim=1)
         a = self.attn_fc(z2) #self.attn_fc(z2, self.num_bits, self.num_grad_bits)
+        if self.norm_attn:
+            attn_dim = z2.shape[1]
+            a = a * (1. / torch.sqrt(attn_dim))
         return {'e': F.leaky_relu(a)}
 
     def message_func(self, edges):
@@ -513,6 +536,10 @@ class QGATLayer(nn.Module):
 
         # transform features in low precision using quantized linear layer
         z = self.fc(h) #self.fc(h, num_bits, num_grad_bits)
+        if self.use_layer_norm:
+            z = self.proj_norm(z) # perform layernorm in full precision
+        if z.shape[1] == h.shape[1] and self.use_res_conn:
+            z = h + z
         g.ndata['z'] = z
 
         # compute the unnormalized attention score in low precision
@@ -524,6 +551,10 @@ class QGATLayer(nn.Module):
         g.update_all(self.message_func, self.reduce_func)
         qres = g.ndata.pop('h')
         #qres = quantize_grad(qres, num_bits=num_grad_bits, flatten_dims=None)
+        if self.use_layer_norm:
+            qres = self.agg_norm(qres) # perform layernorm in full precision
+        if qres.shape[1] == z.shape[1] and self.use_res_conn:
+            qres = qres + z
         return qres
 
 class QLinear(nn.Linear):
