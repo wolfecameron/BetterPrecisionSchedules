@@ -60,21 +60,36 @@ class QGCN(nn.Module):
                 h = F.layer_norm(h, h.shape) # perform layernorm in full precision
         return h
 
-class GATPlus(nn.Module):
-    def __init__(self, g, in_dim, hidden_dim, out_dim, num_heads, p=0.6,
+class QGATPlus(nn.Module):
+    def __init__(self, g, in_dim, hidden_dim, out_dim, num_heads, p=0.6, merge='proj',
             quant_agg=False, dpt_inp=False, dpt_attn=False, use_layer_norm=False,
-            use_res_conn=False, norm_attn=False, project_attn=False, use_classif_layer=False):
+            use_res_conn=False, norm_attn=False, use_classif_layer=False):
         super().__init__()
         self.g = g
+        self.use_classif_layer = use_classif_layer 
+
         self.layer1 = MultiHeadQGATLayer(in_dim, hidden_dim, num_heads, p=p,
-                quant_agg=quant_agg, dpt_inp=dpt_inp, dpt_attn=dpt_attn)
-        self.layer2 = MultiHeadQGATLayer(hidden_dim, out_dim, 1, p=p,
-                quant_agg=quant_agg, dpt_inp=dpt_inp, dpt_attn=dpt_attn)
+                merge=merge, quant_agg=quant_agg, dpt_inp=dpt_inp, dpt_attn=dpt_attn,
+                use_layer_norm=use_layer_norm, use_res_conn=use_res_conn,
+                norm_attn=norm_attn)
+        if self.use_classif_layer:
+            self.layer2 = MultiHeadQGATLayer(hidden_dim, hidden_dim, num_heads=num_heads, p=p,
+                    merge=merge, quant_agg=quant_agg, dpt_inp=dpt_inp, dpt_attn=dpt_attn,
+                    use_layer_norm=use_layer_norm, use_res_conn=use_res_conn,
+                    norm_attn=norm_attn)
+            self.classif = nn.Linear(hidden_dim, out_dim, bias=False)
+        else:
+            self.layer2 = MultiHeadQGATLayer(hidden_dim, out_dim, num_heads=1, p=p,
+                    merge='mean', quant_agg=quant_agg, dpt_inp=dpt_inp, dpt_attn=dpt_attn,
+                    use_layer_norm=use_layer_norm, use_res_conn=use_res_conn,
+                    norm_attn=norm_attn)
 
     def forward(self, h, num_bits, num_grad_bits):
         h = self.layer1(self.g, h, num_bits, num_grad_bits)
         h = F.elu(h)
         h = self.layer2(self.g, h, num_bits, num_grad_bits)
+        if self.use_classif_layer:
+            h = self.classif(h)
         return h
     
 

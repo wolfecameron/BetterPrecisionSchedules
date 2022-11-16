@@ -6,7 +6,7 @@ import wandb
 import torch
 import torch.nn.functional as F
 
-from models import QGCN, QGAT
+from models import QGCN, QGAT, QGATPlus
 
 from ogb.nodeproppred import DglNodePropPredDataset, Evaluator
 import dgl
@@ -59,13 +59,22 @@ def main():
     parser = argparse.ArgumentParser(description='OGBN-Arxiv (GNN)')
     parser.add_argument('--exp-name', type=str, default='gnn_quant_00')
     parser.add_argument("--gpu", type=int, default=0, help="gpu")
-    parser.add_argument('--arch', type=str, default='gnn', choices=['gnn', 'gat'])
+    
+    parser.add_argument('--arch', type=str, default='gnn', choices=['gnn', 'gat', 'gat-plus'])
     parser.add_argument("--n-layers", type=int, default=3,
                         help="number of hidden gcn layers")
     parser.add_argument("--n-hidden", type=int, default=128,
                         help="number of hidden gcn units")
     parser.add_argument('--n-heads', type=int, default=8)
     parser.add_argument('--dropout', type=float, default=0.5)
+    parser.add_argumenet('--merge', type=str, choices=['proj', 'cat', 'mean'], default='mean')
+    parser.add_argument('--dpt-inp', action='store_true', default=False)
+    parser.add_argument('--dpt-attn', action='store_true', default=False)
+    parser.add_argument('--use-layer-norm', action='store_true', default=False)
+    parser.add_argument('--use-res-conn', action='store_true', default=False)
+    parser.add_argument('--norm-attn', action='store_true', default=False)
+    parser.add_argument('--use-classif-layer', action='store_true', default=False)
+
     parser.add_argument('--lr', type=float, default=0.01)
     parser.add_argument('--lr-schedule', type=str, default='fixed')
     parser.add_argument("--n-epochs", type=int, default=1000,
@@ -90,8 +99,6 @@ def main():
     # GNN-specific cpt params
     parser.add_argument('--quant-norm', action='store_true', default=False)
     parser.add_argument('--quant-agg', action='store_true', default=False)
-    parser.add_argument('--dpt-inp', action='store_true', default=False)
-    parser.add_argument('--dpt-attn', action='store_true', default=False)
 
     # these are updated by the scheduling code
     parser.add_argument('--num_bits', default=0, type=int,
@@ -142,11 +149,17 @@ def main():
     if args.arch == 'gnn':
         model = QGCN(g, n_features, args.n_hidden, n_classes, args.n_layers,
                 F.relu, args.dropout, quant_norm=args.quant_norm,
-                quant_agg=args.quant_agg).to(device)
+                merge=args.merge, quant_agg=args.quant_agg).to(device)
     elif args.arch == 'gat':
         model = QGAT(g, n_features, args.n_hidden, n_classes, args.n_heads,
                 args.dropout, quant_agg=args.quant_agg, dpt_inp=args.dpt_inp,
-                dpt_attn=args.dpt_attn).to(device) 
+                merge=args.merge, dpt_attn=args.dpt_attn).to(device) 
+    elif args.arch == 'gat-plus':
+        model = GATPlus(g, n_features, args.n_hidden, n_classes, args.n_heads,
+                p=args.dropout, quant_agg=args.quant_agg, merge=args.merge,
+                dpt_inp=args.dpt_inp, dpt_attn=args.dpt_attn,
+                use_layer_norm=args.use_layer_norm, use_res_conn=args.use_res_conn,
+                norm_attn=args.norm_attn, use_classif_layer=args.use_classif_layer).to(device)
     else:
         raise NotImplementedError()
     vals, tests = [], []
