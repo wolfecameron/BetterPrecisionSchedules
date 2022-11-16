@@ -440,7 +440,7 @@ class MultiHeadQGATLayer(nn.Module):
 
 class QGATLayer(nn.Module):
     def __init__(self, in_dim, out_dim, p=0.6, quant_agg=False, dpt_inp=False,
-            dpt_attn=False, use_layer_norm=False, usse_res_conn=False, norm_attn=False):
+            dpt_attn=False, use_layer_norm=False, use_res_conn=False, norm_attn=False):
         super(QGATLayer, self).__init__()
         self.fc = nn.Linear(in_dim, out_dim, bias=False)
         self.attn_fc = nn.Linear(2 * out_dim, 1, bias=False)
