@@ -67,7 +67,7 @@ def main():
                         help="number of hidden gcn units")
     parser.add_argument('--n-heads', type=int, default=8)
     parser.add_argument('--dropout', type=float, default=0.5)
-    parser.add_argumenet('--merge', type=str, choices=['proj', 'cat', 'mean'], default='mean')
+    parser.add_argument('--merge', type=str, choices=['proj', 'cat', 'mean'], default='mean')
     parser.add_argument('--dpt-inp', action='store_true', default=False)
     parser.add_argument('--dpt-attn', action='store_true', default=False)
     parser.add_argument('--use-layer-norm', action='store_true', default=False)
@@ -155,7 +155,7 @@ def main():
                 args.dropout, quant_agg=args.quant_agg, dpt_inp=args.dpt_inp,
                 merge=args.merge, dpt_attn=args.dpt_attn).to(device) 
     elif args.arch == 'gat-plus':
-        model = GATPlus(g, n_features, args.n_hidden, n_classes, args.n_heads,
+        model = QGATPlus(g, n_features, args.n_hidden, n_classes, args.n_heads,
                 p=args.dropout, quant_agg=args.quant_agg, merge=args.merge,
                 dpt_inp=args.dpt_inp, dpt_attn=args.dpt_attn,
                 use_layer_norm=args.use_layer_norm, use_res_conn=args.use_res_conn,

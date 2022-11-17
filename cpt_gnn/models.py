@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from dgl.nn.pytorch import GraphConv
+from dgl.nn import SAGEConv
 
 from modules.quantize import QGraphConv, MultiHeadQGATLayer
 
@@ -29,6 +30,25 @@ class GCN(nn.Module):
             h = layer(self.g, h)
             if i < len(self.layers) - 1 and self.use_layernorm:
                 h = F.layer_norm(h, h.shape)
+        return h
+
+class GraphSAGE(nn.Module):
+    def __init__(self, in_feats, h_feats, num_classes, dropout=0.2):
+        super().__init__()
+        self.conv1 = SAGEConv(in_feats, h_feats, aggregator_type='mean')
+        self.conv2 = SAGEConv(h_feats, num_classes, aggregator_type='mean')
+        self.h_feats = h_feats
+        self.dropout = nn.Dropout(p=dropout)
+
+    def forward(self, mfgs, x):
+        # Lines that are changed are marked with an arrow: "<---"
+        h_dst = x[:mfgs[0].num_dst_nodes()]
+        h = self.conv1(mfgs[0], (x, h_dst))
+        h = F.relu(h)
+        h = F.layer_norm(h, h.shape)
+        h = self.dropout(h)
+        h_dst = h[:mfgs[1].num_dst_nodes()]
+        h = self.conv2(mfgs[1], (h, h_dst))
         return h
 
 
@@ -80,7 +100,7 @@ class QGATPlus(nn.Module):
             self.classif = nn.Linear(hidden_dim, out_dim, bias=False)
         else:
             self.layer2 = MultiHeadQGATLayer(hidden_dim, out_dim, num_heads=1, p=p,
-                    merge='mean', quant_agg=quant_agg, dpt_inp=dpt_inp, dpt_attn=dpt_attn,
+                    merge='cat', quant_agg=quant_agg, dpt_inp=dpt_inp, dpt_attn=dpt_attn,
                     use_layer_norm=use_layer_norm, use_res_conn=use_res_conn,
                     norm_attn=norm_attn)
 
