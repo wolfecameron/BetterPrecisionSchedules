@@ -459,8 +459,8 @@ class QGATLayer(nn.Module):
         super(QGATLayer, self).__init__()
         
         # attention and linear transformation layers
-        self.fc = nn.Linear(in_dim, out_dim, bias=False)
-        self.attn_fc = nn.Linear(2 * out_dim, 1, bias=False)
+        self.fc = QLinear(in_dim, out_dim, bias=False)
+        self.attn_fc = QLinear(2 * out_dim, 1, bias=False)
         
         # dropout settings
         self.dpt_inp = dpt_inp
@@ -491,7 +491,9 @@ class QGATLayer(nn.Module):
 
     def edge_attention(self, edges):
         z2 = torch.cat([edges.src['z'], edges.dst['z']], dim=1)
-        a = self.attn_fc(z2) #self.attn_fc(z2, self.num_bits, self.num_grad_bits)
+        a = self.attn_fc(z2, self.num_bits, self.num_grad_bits)
+
+        # normalize in full precision
         if self.norm_attn:
             attn_dim = z2.shape[1]
             a = a * (1. / math.sqrt(attn_dim))
@@ -506,34 +508,28 @@ class QGATLayer(nn.Module):
             alpha = self.attn_dpt(alpha) # apply dropout to normalized attn coefficients
 
         if self.quant_agg:
-            raise ""
             # quantize the neighborhood features
-            neigh_feats = torch.squeeze(nodes.mailbox['z'], dim=1)
+            neigh_feats = nodes.mailbox['z']
             feat_qparams = calculate_qparams(neigh_feats, num_bits=self.num_bits,
-                    flatten_dims=None, reduce_dim=None, reduce_type='extreme')
+                    flatten_dims=(1, 2), reduce_dim=None, reduce_type='extreme')
             qneigh_feats = quantize(neigh_feats, qparams=feat_qparams)
-            qneigh_feats = qneigh_feats[:, None, :]
 
             # quantize the attention values
-            alpha = torch.squeeze(alpha)
             alpha_qparams = calculate_qparams(alpha, num_bits=self.num_bits,
-                    flatten_dims=None, reduce_dim=None, reduce_type='mean')
+                    flatten_dims=(1, 2), reduce_dim=None, reduce_type='mean')
             qalpha = quantize(alpha, qparams=alpha_qparams)
-            qalpha = qalpha[:, None, None]
 
             # multiply features by the attention scores
             qh = qalpha * qneigh_feats
             qh = quantize_grad(qh, num_bits=self.num_grad_bits, flatten_dims=None)
             
-
             # quantize the scaled features
-            qh = torch.squeeze(qh, dim=1)
             h_qparams = calculate_qparams(qh, num_bits=self.num_bits,
-                    flatten_dims=None, reduce_dim=None, reduce_type='extreme')
+                    flatten_dims=(1, 2), reduce_dim=None, reduce_type='extreme')
             qh = quantize(qh, qparams=h_qparams)
-            qh = qh[:, None, :]
             qh = torch.sum(qh, dim=1)
-            return {'h': h}
+            qh = quantize_grad(qh, num_bits=self.num_grad_bits, flatten_dims=None)
+            return {'h': qh}
         else:
             h = torch.sum(alpha * nodes.mailbox['z'], dim=1)
             return {'h': h}
@@ -544,7 +540,7 @@ class QGATLayer(nn.Module):
             h = self.inp_dpt(h)
 
         # transform features in low precision using quantized linear layer
-        z = self.fc(h) #self.fc(h, num_bits, num_grad_bits)
+        z = self.fc(h, num_bits, num_grad_bits)
         if self.use_layer_norm:
             z = self.proj_norm(z) # perform layernorm in full precision
         g.ndata['z'] = z
@@ -557,7 +553,6 @@ class QGATLayer(nn.Module):
         # apply softmax and aggregate features
         g.update_all(self.message_func, self.reduce_func)
         qres = g.ndata.pop('h')
-        #qres = quantize_grad(qres, num_bits=num_grad_bits, flatten_dims=None)
         if self.use_layer_norm:
             qres = self.agg_norm(qres) # perform layernorm in full precision
         return qres
