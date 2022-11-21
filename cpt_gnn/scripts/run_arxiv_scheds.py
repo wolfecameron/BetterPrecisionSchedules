@@ -53,16 +53,15 @@ for nb in nbs:
                         f'--cyclic_num_grad_bits_schedule {ngbs} --tags {tags} --flip-vertically '
                         f'--num_cyclic_period {c} '
                     )
-                    os.system(command)
-                    raise ""
-                    #os.system(command + ' > trn_output.txt')
-                    with open('trn_output.txt', 'r') as f:
+                    os.system(command + ' > arxiv1_output.txt')
+                    with open('arxiv1_output.txt', 'r') as f:
                         trn_output = f.readlines()
                     final_test_acc = float(trn_output[-3][-6:])
                     best_val_acc = float(trn_output[-2][-6:])
                     best_test_acc = float(trn_output[-1][-6:])
                     acc_list = [final_test_acc, best_val_acc, best_test_acc]
                     add_accs_to_results(results, exp_name, acc_list) 
+                    os.remove('arxiv1_output.txt')
                          
                 # run horizontal flip trials
                 exp_name = f'arxiv_{ps}_{nb[0]}_{nb[-1]}_{c}_horizontal'
@@ -76,15 +75,15 @@ for nb in nbs:
                         f'--cyclic_num_grad_bits_schedule {ngbs} --use-wandb --tags {tags} '
                         f'--num_cyclic_period {c} '
                     )
-                    os.system(command + ' > trn_output.txt')
-                    with open('trn_output.txt', 'r') as f:
+                    os.system(command + ' > arxiv1_output.txt')
+                    with open('arxiv1_output.txt', 'r') as f:
                         trn_output = f.readlines()
                     final_test_acc = float(trn_output[-3][-6:])
                     best_val_acc = float(trn_output[-2][-6:])
                     best_test_acc = float(trn_output[-1][-6:])
                     acc_list = [final_test_acc, best_val_acc, best_test_acc]
                     add_accs_to_results(results, exp_name, acc_list) 
-
+                    os.remove('arxiv1_output.txt')
         else:
             for c in cycles:
                 # run vertical flip trials
@@ -99,11 +98,12 @@ for nb in nbs:
                         f'--cyclic_num_grad_bits_schedule {ngbs} --use-wandb --tags {tags} '
                         f'--num_cyclic_period {c} '
                     )
-                    os.system(command + ' > trn_output.txt')
-                    with open('trn_output.txt', 'r') as f:
+                    os.system(command + ' > arxiv1_output.txt')
+                    with open('arxiv1_output.txt', 'r') as f:
                         trn_output = f.readlines()
                     final_test_acc = float(trn_output[-3][-6:])
                     best_val_acc = float(trn_output[-2][-6:])
                     best_test_acc = float(trn_output[-1][-6:])
                     acc_list = [final_test_acc, best_val_acc, best_test_acc]
                     add_accs_to_results(results, exp_name, acc_list) 
+                    os.remove('arxiv1_output.txt')

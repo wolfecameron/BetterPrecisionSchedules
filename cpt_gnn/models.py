@@ -91,18 +91,18 @@ class QGATPlus(nn.Module):
         self.layer1 = MultiHeadQGATLayer(in_dim, hidden_dim, num_heads, p=p,
                 merge=merge, quant_agg=quant_agg, dpt_inp=dpt_inp, dpt_attn=dpt_attn,
                 use_layer_norm=use_layer_norm, use_res_conn=use_res_conn,
-                norm_attn=norm_attn)
+                norm_attn=norm_attn, first_layer=True, last_layer=False)
         if self.use_classif_layer:
             self.layer2 = MultiHeadQGATLayer(hidden_dim, hidden_dim, num_heads=num_heads, p=p,
                     merge=merge, quant_agg=quant_agg, dpt_inp=dpt_inp, dpt_attn=dpt_attn,
                     use_layer_norm=use_layer_norm, use_res_conn=use_res_conn,
-                    norm_attn=norm_attn)
+                    norm_attn=norm_attn, first_layer=False, last_layer=True)
             self.classif = nn.Linear(hidden_dim, out_dim, bias=False)
         else:
             self.layer2 = MultiHeadQGATLayer(hidden_dim, out_dim, num_heads=1, p=p,
                     merge='cat', quant_agg=quant_agg, dpt_inp=dpt_inp, dpt_attn=dpt_attn,
                     use_layer_norm=use_layer_norm, use_res_conn=use_res_conn,
-                    norm_attn=norm_attn)
+                    norm_attn=norm_attn, first_layer=False, last_layer=True)
 
     def forward(self, h, num_bits, num_grad_bits):
         h = self.layer1(self.g, h, num_bits, num_grad_bits)
