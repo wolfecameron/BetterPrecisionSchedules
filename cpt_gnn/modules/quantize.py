@@ -414,18 +414,18 @@ class QGraphConv(nn.Module):
 class MultiHeadQGATLayer(nn.Module):
     def __init__(self, in_dim, out_dim, num_heads, merge='cat', p=0.6, quant_agg=False,
             dpt_inp=False, dpt_attn=False, use_layer_norm=False, use_res_conn=False,
-            norm_attn=False, first_layer=False, last_layer=False):
+            norm_attn=False, first_layer=False):
         super(MultiHeadQGATLayer, self).__init__()
         self.heads = nn.ModuleList()
         for i in range(num_heads):
             if merge == 'cat':
                 self.heads.append(QGATLayer(in_dim, out_dim // num_heads, p=p, quant_agg=quant_agg,
                         dpt_inp=dpt_inp, dpt_attn=dpt_attn, use_layer_norm=use_layer_norm,
-                        norm_attn=norm_attn, first_layer=first_layer, last_layer=last_layer))
+                        norm_attn=norm_attn, first_layer=first_layer))
             else:
                 self.heads.append(QGATLayer(in_dim, out_dim, p=p, quant_agg=quant_agg,
                         dpt_inp=dpt_inp, dpt_attn=dpt_attn, use_layer_norm=use_layer_norm,
-                        norm_attn=norm_attn, first_layer=first_layer, last_layer=last_layer))
+                        norm_attn=norm_attn, first_layer=first_layer))
         self.merge = merge
         if self.merge == 'proj':
             self.head_proj = nn.Linear(out_dim * num_heads, out_dim, bias=False)
@@ -456,7 +456,7 @@ class MultiHeadQGATLayer(nn.Module):
 class QGATLayer(nn.Module):
     def __init__(self, in_dim, out_dim, p=0.6, quant_agg=False, dpt_inp=False,
             dpt_attn=False, use_layer_norm=False, norm_attn=False,
-            first_layer=False, last_layer=False):
+            first_layer=False):
         super(QGATLayer, self).__init__()
         
         # attention and linear transformation layers
@@ -474,11 +474,9 @@ class QGATLayer(nn.Module):
         
         # normalization settings
         self.use_layer_norm = use_layer_norm
-        self.last_layer = last_layer
         if self.use_layer_norm:
             self.proj_norm = nn.LayerNorm(out_dim)
-            if not self.last_layer:
-                self.agg_norm = nn.LayerNorm(out_dim)
+            self.agg_norm = nn.LayerNorm(out_dim)
         self.norm_attn = norm_attn
 
         # CPT stuff
@@ -557,7 +555,7 @@ class QGATLayer(nn.Module):
         # apply softmax and aggregate features
         g.update_all(self.message_func, self.reduce_func)
         qres = g.ndata.pop('h')
-        if self.use_layer_norm and not self.last_layer:
+        if self.use_layer_norm:
             qres = self.agg_norm(qres) # perform layernorm in full precision
         return qres
 
