@@ -1,0 +1,10 @@
+*.txt
+*.pyc
+*.swp
+*.csv.gz
+*.json
+*.log
+*.yaml
+*.wandb
+*.pth
+data_batch_*
