@@ -82,27 +82,24 @@ class QGCN(nn.Module):
 
 class QGATPlus(nn.Module):
     def __init__(self, g, in_dim, hidden_dim, out_dim, num_heads, p=0.6, merge='proj',
-            quant_agg=False, dpt_inp=False, dpt_attn=False, use_layer_norm=False,
-            use_res_conn=False, norm_attn=False, use_classif_layer=False):
+            quant_agg=False, use_layer_norm=False, use_res_conn=False, norm_attn=False,
+            use_classif_layer=False):
         super().__init__()
         self.g = g
         self.use_classif_layer = use_classif_layer 
 
         self.layer1 = MultiHeadQGATLayer(in_dim, hidden_dim, num_heads, p=p,
-                merge=merge, quant_agg=quant_agg, dpt_inp=dpt_inp, dpt_attn=dpt_attn,
-                use_layer_norm=use_layer_norm, use_res_conn=use_res_conn,
-                norm_attn=norm_attn, first_layer=True)
+                merge=merge, quant_agg=quant_agg, use_layer_norm=use_layer_norm,
+                use_res_conn=use_res_conn, norm_attn=norm_attn, first_layer=True)
         if self.use_classif_layer:
             self.layer2 = MultiHeadQGATLayer(hidden_dim, hidden_dim, num_heads=num_heads, p=p,
-                    merge=merge, quant_agg=quant_agg, dpt_inp=dpt_inp, dpt_attn=dpt_attn,
-                    use_layer_norm=use_layer_norm, use_res_conn=use_res_conn,
-                    norm_attn=norm_attn, first_layer=False)
+                    merge=merge, quant_agg=quant_agg, use_layer_norm=use_layer_norm,
+                    use_res_conn=use_res_conn, norm_attn=norm_attn, first_layer=False)
             self.classif = nn.Linear(hidden_dim, out_dim, bias=False)
         else:
             self.layer2 = MultiHeadQGATLayer(hidden_dim, out_dim, num_heads=1, p=p,
-                    merge='cat', quant_agg=quant_agg, dpt_inp=dpt_inp, dpt_attn=dpt_attn,
-                    use_layer_norm=use_layer_norm, use_res_conn=use_res_conn,
-                    norm_attn=norm_attn, first_layer=False)
+                    merge='cat', quant_agg=quant_agg, use_layer_norm=use_layer_norm,
+                    use_res_conn=use_res_conn, norm_attn=norm_attn, first_layer=False)
 
     def forward(self, h, num_bits, num_grad_bits):
         h = self.layer1(self.g, h, num_bits, num_grad_bits)

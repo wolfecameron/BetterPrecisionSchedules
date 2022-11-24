@@ -68,8 +68,6 @@ def main():
     parser.add_argument('--n-heads', type=int, default=8)
     parser.add_argument('--dropout', type=float, default=0.5)
     parser.add_argument('--merge', type=str, choices=['proj', 'cat', 'mean'], default='mean')
-    parser.add_argument('--dpt-inp', action='store_true', default=False)
-    parser.add_argument('--dpt-attn', action='store_true', default=False)
     parser.add_argument('--use-layer-norm', action='store_true', default=False)
     parser.add_argument('--use-res-conn', action='store_true', default=False)
     parser.add_argument('--norm-attn', action='store_true', default=False)
@@ -149,7 +147,7 @@ def main():
     if args.arch == 'gnn':
         model = QGCN(g, n_features, args.n_hidden, n_classes, args.n_layers,
                 F.relu, args.dropout, quant_norm=args.quant_norm,
-                merge=args.merge, quant_agg=args.quant_agg).to(device)
+                quant_agg=args.quant_agg).to(device)
     elif args.arch == 'gat':
         model = QGAT(g, n_features, args.n_hidden, n_classes, args.n_heads,
                 args.dropout, quant_agg=args.quant_agg, dpt_inp=args.dpt_inp,
@@ -157,7 +155,6 @@ def main():
     elif args.arch == 'gat-plus':
         model = QGATPlus(g, n_features, args.n_hidden, n_classes, args.n_heads,
                 p=args.dropout, quant_agg=args.quant_agg, merge=args.merge,
-                dpt_inp=args.dpt_inp, dpt_attn=args.dpt_attn,
                 use_layer_norm=args.use_layer_norm, use_res_conn=args.use_res_conn,
                 norm_attn=args.norm_attn, use_classif_layer=args.use_classif_layer).to(device)
     else:
