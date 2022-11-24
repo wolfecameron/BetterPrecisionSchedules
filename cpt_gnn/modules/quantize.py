@@ -583,56 +583,26 @@ class QLinear(nn.Linear):
 
 
 class SAGEQConv(nn.Module):
-    def __init__(self, in_feats, out_feats, feat_drop=0., bias=True,
-            norm=None, activation=None):
+    def __init__(self, in_feats, out_feats, feat_drop=0., bias=True, quant_agg=False):
         super().__init__()
-
         self._in_src_feats, self._in_dst_feats = expand_as_pair(in_feats)
         self._out_feats = out_feats
         self._aggre_type = 'mean'
-        self.norm = norm
         self.feat_drop = nn.Dropout(feat_drop)
-        self.activation = activation
-        self.fc_neigh = nn.Linear(self._in_src_feats, out_feats, bias=False)
+        self.fc_neigh = QLinear(self._in_src_feats, out_feats, bias=False)
+        self.fc_self = QLinear(self._in_dst_feats, out_feats, bias=False)
         if bias:
             self.bias = nn.parameter.Parameter(torch.zeros(self._out_feats))
         else:
             self.register_buffer('bias', None)
+        self.quant_agg = quant_agg
         self.reset_parameters()
 
     def reset_parameters(self):
         gain = nn.init.calculate_gain('relu')
         nn.init.xavier_uniform_(self.fc_neigh.weight, gain=gain)
 
-    def forward(self, graph, feat, edge_weight=None):
-        r"""
-
-        Description
-        -----------
-        Compute GraphSAGE layer.
-
-        Parameters
-        ----------
-        graph : DGLGraph
-            The graph.
-        feat : torch.Tensor or pair of torch.Tensor
-            If a torch.Tensor is given, it represents the input feature of shape
-            :math:`(N, D_{in})`
-            where :math:`D_{in}` is size of input feature, :math:`N` is the number of nodes.
-            If a pair of torch.Tensor is given, the pair must contain two tensors of shape
-            :math:`(N_{in}, D_{in_{src}})` and :math:`(N_{out}, D_{in_{dst}})`.
-        edge_weight : torch.Tensor, optional
-            Optional tensor on the edge. If given, the convolution will weight
-            with regard to the message.
-
-        Returns
-        -------
-        torch.Tensor
-            The output feature of shape :math:`(N_{dst}, D_{out})`
-            where :math:`N_{dst}` is the number of destination nodes in the input graph,
-            :math:`D_{out}` is the size of the output feature.
-        """
-        #self._compatibility_check()
+    def forward(self, graph, feat, num_bits, num_grad_bits):
         with graph.local_scope():
             if isinstance(feat, tuple):
                 feat_src = self.feat_drop(feat[0])
@@ -642,10 +612,6 @@ class SAGEQConv(nn.Module):
                 if graph.is_block:
                     feat_dst = feat_src[:graph.number_of_dst_nodes()]
             msg_fn = fn.copy_src('h', 'm')
-            if edge_weight is not None:
-                assert edge_weight.shape[0] == graph.number_of_edges()
-                graph.edata['_edge_weight'] = edge_weight
-                msg_fn = fn.u_mul_e('h', '_edge_weight', 'm')
 
             h_self = feat_dst
 
@@ -658,53 +624,40 @@ class SAGEQConv(nn.Module):
             lin_before_mp = self._in_src_feats > self._out_feats
 
             # Message Passing
-            if self._aggre_type == 'mean':
-                graph.srcdata['h'] = self.fc_neigh(feat_src) if lin_before_mp else feat_src
-                graph.update_all(msg_fn, fn.mean('m', 'neigh'))
-                h_neigh = graph.dstdata['neigh']
-                if not lin_before_mp:
-                    h_neigh = self.fc_neigh(h_neigh)
-            elif self._aggre_type == 'gcn':
-                check_eq_shape(feat)
-                graph.srcdata['h'] = self.fc_neigh(feat_src) if lin_before_mp else feat_src
-                if isinstance(feat, tuple):  # heterogeneous
-                    graph.dstdata['h'] = self.fc_neigh(feat_dst) if lin_before_mp else feat_dst
-                else:
-                    if graph.is_block:
-                        graph.dstdata['h'] = graph.srcdata['h'][:graph.num_dst_nodes()]
-                    else:
-                        graph.dstdata['h'] = graph.srcdata['h']
-                graph.update_all(msg_fn, fn.sum('m', 'neigh'))
-                # divide in_degrees
-                degs = graph.in_degrees().to(feat_dst)
-                h_neigh = (graph.dstdata['neigh'] + graph.dstdata['h']) / (degs.unsqueeze(-1) + 1)
-                if not lin_before_mp:
-                    h_neigh = self.fc_neigh(h_neigh)
-            elif self._aggre_type == 'pool':
-                graph.srcdata['h'] = F.relu(self.fc_pool(feat_src))
-                graph.update_all(msg_fn, fn.max('m', 'neigh'))
-                h_neigh = self.fc_neigh(graph.dstdata['neigh'])
-            elif self._aggre_type == 'lstm':
-                graph.srcdata['h'] = feat_src
-                graph.update_all(msg_fn, self._lstm_reducer)
-                h_neigh = self.fc_neigh(graph.dstdata['neigh'])
-            else:
-                raise KeyError('Aggregator type {} not recognized.'.format(self._aggre_type))
+            assert self._aggre_type == 'mean'
+            if lin_before_mp:
+                feat_src = self.fc_neigh(feat_src, num_bits, num_grad_bits)
 
-            # GraphSAGE GCN does not require fc_self.
-            if self._aggre_type == 'gcn':
-                rst = h_neigh
-            else:
-                rst = self.fc_self(h_self) + h_neigh
+            # quantize features before aggregation
+            if self.quant_agg:
+                feat_qparams = calculate_qparams(feat_src, num_bits=num_bits,
+                        flatten_dims=None, reduce_dim=None, reduce_type='extreme')
+                feat_src = quantize(feat_src, qparams=feat_qparams)
+            graph.srcdata['h'] = feat_src
+
+            graph.update_all(msg_fn, fn.mean('m', 'neigh'))
+            h_neigh = graph.dstdata['neigh']
+            if self.quant_agg:
+                h_neigh = quantize_grad(h_neigh, num_bits=num_grad_bits, flatten_dims=None)
+            if not lin_before_mp:
+                h_neigh = self.fc_neigh(h_neigh, num_bits, num_grad_bits)
+
+            rst = self.fc_self(h_self, num_bits, num_grad_bits) + h_neigh
 
             # bias term
             if self.bias is not None:
-                rst = rst + self.bias
+                # quantize the bias
+                bias_qparams = calculate_qparams(self.bias, num_bits=num_bits,
+                        flatten_dims=None, reduce_dim=None, reduce_type='mean')
+                bias = quantize(self.bias, qparams=bias_qparams)
 
-            # activation
-            if self.activation is not None:
-                rst = self.activation(rst)
-            # normalization
-            if self.norm is not None:
-                rst = self.norm(rst)
+                # quantize the features
+                rst_qparams = calculate_qparams(rst, num_bits=num_bits,
+                        flatten_dims=None, reduce_dim=None, reduce_type='extreme')
+                rst = quantize(rst, qparams=rst_qparams)
+
+                # add bias and quantize the gradient
+                rst = rst + bias
+                rst = quantize_grad(rst, num_bits=num_grad_bits, flatten_dims=None)
+
             return rst

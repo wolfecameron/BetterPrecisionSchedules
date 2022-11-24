@@ -3,7 +3,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from dgl.nn.pytorch import GraphConv
 
 from modules.quantize import QGraphConv, MultiHeadQGATLayer, SAGEQConv
 
@@ -32,23 +31,27 @@ class GCN(nn.Module):
         return h
 
 class QGraphSAGE(nn.Module):
-    def __init__(self, in_feats, h_feats, num_classes, dropout=0.2):
+    def __init__(self, in_feats, h_feats, num_classes, dropout=0.2, quant_agg=False):
         super().__init__()
         # implemented with mean aggregator
-        self.conv1 = SAGEQConv(in_feats, h_feats)
-        self.conv2 = SAGEQConv(h_feats, num_classes)
+        self.conv1 = SAGEQConv(in_feats, h_feats, bias=True, quant_agg=quant_agg)
+        self.conv2 = SAGEQConv(h_feats, num_classes, bias=True, quant_agg=quant_agg)
         self.h_feats = h_feats
         self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, mfgs, x):
-        # Lines that are changed are marked with an arrow: "<---"
+    def forward(self, mfgs, x, num_bits, num_grad_bits):
+        # first SAGE layer
         h_dst = x[:mfgs[0].num_dst_nodes()]
-        h = self.conv1(mfgs[0], (x, h_dst))
+        h = self.conv1(mfgs[0], (x, h_dst), num_bits, num_grad_bits)
+
+        # activation and layer norm in full precision
         h = F.relu(h)
-        h = F.layer_norm(h, h.shape) # layer norm in full precision
+        h = F.layer_norm(h, h.shape)
         h = self.dropout(h)
+
+        # second SAGE layer
         h_dst = h[:mfgs[1].num_dst_nodes()]
-        h = self.conv2(mfgs[1], (h, h_dst))
+        h = self.conv2(mfgs[1], (h, h_dst), num_bits, num_grad_bits)
         return h
 
 
