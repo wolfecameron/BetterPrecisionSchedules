@@ -2,24 +2,25 @@ import os
 
 # test one
 # setup
-gpu = 0
-datadir = '/data/'
-base_save_dir = '/data/crw13/quant_results'
+gpu = 1
+datadir = './data/'
+base_save_dir = './quant_results'
 eval_every = 390
-trials = 2
+trials = 1
 
 # training
-start_defs = [16000, 32000, 48000]
-end_defs = [x + 64000 for x in start_defs]
-iters = 128000
+start_defs = [0] #16000, 32000,  64000]
+end_defs = [x + 128000 for x in start_defs]
+iters = 256000
 bs = 128
 lr_sched = 'piecewise'
 dataset = 'cifar10'
 lr = 0.1
 step_ratio = 0.1
-wd = 1e-4
+wd = 0.
 warm_up = False
 pretrained = False
+tag = 'cifar_cl_probe'
 
 # quant
 num_bits = '3 8'
@@ -31,16 +32,18 @@ max_bit = num_bits[-1]
 min_bit = num_bits[0]
 for sd, ed in zip(start_defs, end_defs):
     for t in range(trials):
-        exp_name = f'{dataset}_{arch}_probe_{sd}_{ed}_quant_min{min_bit}_{t}/'
+        exp_name = f'{dataset}_{arch}_clprobe_{sd}_{ed}_{t}/'
         save_dir = os.path.join(base_save_dir, exp_name)
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
         command = (f'CUDA_VISIBLE_DEVICES={gpu} python crit_learn_probe.py --cmd train '
-                f'--arch {arch} --dataset {dataset} --datadir {datadir} --iters {iters} '
-                f'--start-def {sd} --end-def {ed} '
+                f'--exp-name {exp_name} --arch {arch} --dataset {dataset} '
+                f'--datadir {datadir} --iters {iters} --start-def {sd} --end-def {ed} '
                 f'--batch_size {bs} --lr_schedule {lr_sched} --lr {lr} --weight_decay {wd} '
                 f'--step_ratio {step_ratio} --save_folder {save_dir} --eval_every {eval_every} '
-                f'--cyclic_num_bits_schedule {num_bits} --cyclic_num_grad_bits_schedule {num_grad_bit} ')
+                f'--cyclic_num_bits_schedule {num_bits} --cyclic_num_grad_bits_schedule {num_grad_bit} '
+                f'--use-wandb --tags {tag} '
+        )
         if warm_up:
             command += ' --warm_up'
         if pretrained:

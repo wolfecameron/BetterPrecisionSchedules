@@ -1,5 +1,6 @@
 from __future__ import print_function
 
+import wandb
 import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
@@ -27,6 +28,7 @@ model_names = sorted(name for name in models.__dict__
 def parse_args():
     parser = argparse.ArgumentParser(
         description='PyTorch CIFAR training with CPT')
+    parser.add_argument('--exp-name', type=str, default='cl_cnn_00')
     parser.add_argument('--dir', help='annotate the working directory')
     parser.add_argument('--cmd', choices=['train', 'test'], default='train')
     parser.add_argument('--arch', metavar='ARCH', default='cifar10_resnet_38',
@@ -91,7 +93,42 @@ def parse_args():
     parser.add_argument('--swa_start', type=float, default=None, help='SWA start step number')
     parser.add_argument('--swa_freq', type=float, default=1170,
                         help='SWA model collection frequency')
+    parser.add_argument('--use-wandb', action='store_true', default=False)
+    parser.add_argument('--tags', type=str, default=None)
     args = parser.parse_args()
+    
+    if args.use_wandb:
+        wandb_run = wandb.init(
+                project='cnn-quant',
+                entity='cameron-research',
+                name=args.exp_name,
+                tags=args.tags
+        )
+        wandb_run.define_metric(
+                name=f'Training Loss',
+                step_metric='Iteration',
+        )
+        wandb_run.define_metric(
+                name=f'Training Accuracy',
+                step_metric='Iteration',
+        )
+        wandb_run.define_metric(
+                name=f'Test Accuracy',
+                step_metric='Iteration',
+        )
+        wandb_run.define_metric(
+                name=f'Bits',
+                step_metric='Iteration',
+        )
+        wandb_run.define_metric(
+                name=f'Grad Bits',
+                step_metric='Iteration',
+        )
+        wandb_run.define_metric(
+                name=f'Learning Rate',
+                step_metric='Iteration',
+        )
+        wandb.config = args.__dict__
     return args
 
 
@@ -279,6 +316,17 @@ def run_training(args):
                 with torch.no_grad():
                     prec1 = validate(args, test_loader, model, criterion, i)
                 
+                # update wandb metrics
+                if args.use_wandb:
+                    wandb.log({
+                        'Training Loss': losses.avg,
+                        'Training Accuracy': top1.avg,
+                        'Test Accuracy': prec1,
+                        'Bits': args.num_bits,
+                        'Grad Bits': args.num_grad_bits,
+                        'Iteration': i, 
+                    })
+                
                 is_best = prec1 > best_prec1
                 if is_best:
                     best_prec1 = prec1
@@ -450,6 +498,12 @@ def adjust_learning_rate(args, optimizer, _iter):
 
     if _iter % args.eval_every == 0:
         logging.info('Iter [{}] learning rate = {}'.format(_iter, lr))
+    
+    if args.use_wandb:
+        wandb.log({
+            'Learning Rate': lr,
+            'Iteration': _iter, 
+        })
 
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr

@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
 import numpy as np
+import wandb
 
 import os
 import shutil
@@ -27,6 +28,7 @@ model_names = sorted(name for name in models.__dict__
 def parse_args():
     parser = argparse.ArgumentParser(
         description='PyTorch CIFAR training with CPT')
+    parser.add_argument('--exp-name', type=str, default='cl_cnn_00')
     parser.add_argument('--dir', help='annotate the working directory')
     parser.add_argument('--cmd', choices=['train', 'test'], default='train')
     parser.add_argument('--arch', metavar='ARCH', default='cifar10_resnet_38',
@@ -96,8 +98,8 @@ def parse_args():
     
     if args.use_wandb:
         wandb_run = wandb.init(
-                project="cnn-quant",
-                entity="cameron-research",
+                project='cnn-quant',
+                entity='cameron-research',
                 name=args.exp_name,
                 tags=args.tags
         )
@@ -119,6 +121,10 @@ def parse_args():
         )
         wandb_run.define_metric(
                 name=f'Grad Bits',
+                step_metric='Iteration',
+        )
+        wandb_run.define_metric(
+                name=f'Learning Rate',
                 step_metric='Iteration',
         )
         wandb.config = args.__dict__
@@ -506,6 +512,12 @@ def adjust_learning_rate(args, optimizer, _iter):
     if _iter % args.eval_every == 0:
         logging.info('Iter [{}] learning rate = {}'.format(_iter, lr))
 
+    if args.use_wandb:
+        wandb.log({
+            'Learning Rate': lr,
+            'Iteration': _iter, 
+        })
+        
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
