@@ -2,14 +2,14 @@ import os
 
 # test one
 # setup
-gpu = 1
+gpu = 0
 datadir = './data/'
 base_save_dir = './quant_results'
 eval_every = 390
 trials = 1
 
 # training
-start_defs = [0] #16000, 32000,  64000]
+start_defs = [0, 16000, 32000,  64000]
 end_defs = [x + 128000 for x in start_defs]
 iters = 256000
 bs = 128
@@ -32,7 +32,7 @@ max_bit = num_bits[-1]
 min_bit = num_bits[0]
 for sd, ed in zip(start_defs, end_defs):
     for t in range(trials):
-        exp_name = f'{dataset}_{arch}_clprobe_{sd}_{ed}_{t}/'
+        exp_name = f'{dataset}_{arch}_clprobe_{sd}_{ed}_{t + 1}/'
         save_dir = os.path.join(base_save_dir, exp_name)
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)

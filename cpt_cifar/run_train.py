@@ -2,34 +2,34 @@ import os
 
 # test one
 # setup
-gpu = 0
+gpu = 1
 datadir = '/home/exx/data/'
 base_save_dir = './quant_results'
 eval_every = 390
-trials = 3
+trials = 2
 
 # training
 iters = 64000
 bs = 128
 lr_sched = 'piecewise'
-lr = 0.1
+lr = 0.03
 step_ratio = 0.1
 wd = 1e-4
 warm_up = False
 pretrained = False
 
 # quant
-num_bits = ['3 8']
+num_bits = ['4 8']
 num_grad_bit = '8 8'
 
 # stuff that changes
-datasets = ['cifar10']
+datasets = ['cifar10', 'cifar100']
 #prec_scheds = ['demon_decay', 'demon_growth', 'exp_decay', 'exp_growth', 'linear_decay', 'linear_growth', 'cos_decay', 'cos_growth']
 prec_scheds = ['exp_decay', 'exp_growth']
 cycles = [8]
 
 for ds in datasets:
-    arch = f'{ds}_resnet_74'
+    arch = f'{ds}_mobilenet_v2'
     for nb in num_bits:
         max_bit = nb[-1]
         for ps in prec_scheds:
