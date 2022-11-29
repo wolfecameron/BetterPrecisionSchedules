@@ -11,7 +11,8 @@ lrr = 0.1
 wd = 1e-4
 trials = 2
 lrs = 'anneal_cosine'
-tag = 'amazon_fixed_tuning'
+qagg = True
+tag = 'amazon_qagg_baseline'
 
 ps = 'fixed'
 nbs_list = ['6 6', '8 8']
@@ -21,7 +22,7 @@ cycles = 8
 for nbs, ngbs in zip(nbs_list, ngbs_list):
     num_bits = nbs[-1]
     for t in range(trials):
-        exp_name = f'amazon_fixed_fpagg_{num_bits}bits_{t}'
+        exp_name = f'amazon_fixed_qagg_{num_bits}bits_{t}'
         command = (
             f'CUDA_VISIBLE_DEVICES={gpu} python train_amazon.py --exp-name {exp_name} '
             f'--n-hidden {hidden} --dropout {dpt} --num-neighbors {neighbors} '
@@ -31,4 +32,6 @@ for nbs, ngbs in zip(nbs_list, ngbs_list):
             f'--num_cyclic_period {cycles} --num_bits 8 --num_grad_bits 8 '
             f'--use-wandb --tags {tag} '
         )
+        if qagg:
+            command += f'--quant-agg '
         os.system(command)

@@ -1,6 +1,7 @@
 from __future__ import print_function
 
 import torch
+import wandb
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
@@ -28,6 +29,7 @@ def parse_args():
     # hyper-parameters are from ResNet paper
     parser = argparse.ArgumentParser(
         description='PyTorch ImageNet training with CPT')
+    parser.add_argument('--exp-name', type=str, default='cl_cnn_00')
     parser.add_argument('--dir', help='annotate the working directory')
     parser.add_argument('--cmd', choices=['train', 'test'], default='train')
     parser.add_argument('--arch', metavar='ARCH', default='resnet50',
@@ -87,7 +89,44 @@ def parse_args():
                         help='cyclic schedule for grad precision')
     parser.add_argument('--automatic_resume', action='store_true',
                         help='automatically resume from latest checkpoint')
+    parser.add_argument('--use-wandb', action='store_true', default=False)
+    parser.add_argument('--tags', type=str, action='append', default=None)
     args = parser.parse_args()
+
+    if args.use_wandb:
+        wandb_run = wandb.init(
+                project='cnn-quant',
+                entity='cameron-research',
+                name=args.exp_name,
+                tags=args.tags,
+                config={},
+        )
+        wandb_run.define_metric(
+                name=f'Training Loss',
+                step_metric='Epoch',
+        )
+        wandb_run.define_metric(
+                name=f'Training Accuracy',
+                step_metric='Epoch',
+        )
+        wandb_run.define_metric(
+                name=f'Test Accuracy',
+                step_metric='Epoch',
+        )
+        wandb_run.define_metric(
+                name=f'Num Bits',
+                step_metric='Epoch',
+        )
+        wandb_run.define_metric(
+                name=f'Num Grad Bits',
+                step_metric='Epoch',
+        )
+        wandb_run.define_metric(
+                name=f'Learning Rate',
+                step_metric='Epoch',
+        )
+        wandb.config.update(args)
+
     return args
 
 
@@ -125,13 +164,10 @@ def main():
 
 
 def run_training(args):
-    # create model
-    training_loss = 0
-    training_acc = 0
-
     model = models.__dict__[args.arch](args.pretrained)
     model = torch.nn.DataParallel(model).cuda()
 
+    # track when your model achieves the best performance
     best_prec1 = 0
     best_epoch = 0
 
@@ -191,9 +227,20 @@ def run_training(args):
     end = time.time()
 
     for _epoch in range(args.start_epoch, args.epoch):
+        # track metrics during training
+        training_loss = 0
+        training_acc = 0
+
         # adjust the learning rate per epoch
         lr = adjust_learning_rate(args, optimizer, _epoch)
         cyclic_adjust_precision(args, _epoch)
+        if args.use_wandb:
+            wandb.log({
+                'Epoch': _epoch,
+                'Learning Rate': lr,
+                'Num Bits': args.num_bits,
+                'Num Grad Bits': args.num_grad_bits,
+            })
 
         print('Learning Rate:', lr)
         print('num bits:', args.num_bits, 'num grad bits:', args.num_grad_bits)
@@ -249,10 +296,19 @@ def run_training(args):
                                 top1=top1)
                 )
 
+
         epoch = _epoch + 1
         epoch_loss = training_loss / len(train_loader)
+        epoch_acc = training_acc / len(train_loader)
         with torch.no_grad():
             prec1 = validate(args, test_loader, model, criterion, _epoch)
+
+        if args.use_wandb:
+            wandb.log({
+                'Training Loss': epoch_loss,
+                'Training Accuracy': epoch_acc,
+                'Test Accuracy': prec1,
+            })
 
         logging.info('Epoch [{}] num_bits = {} num_grad_bits = {}'.format(epoch, args.num_bits, args.num_grad_bits))
 
@@ -435,6 +491,7 @@ def adjust_learning_rate(args, optimizer, _epoch):
 
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+    return lr
 
 
 
