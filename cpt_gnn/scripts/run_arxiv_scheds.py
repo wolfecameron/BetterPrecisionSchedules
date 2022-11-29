@@ -4,34 +4,35 @@ import os
 import json
 
 gpu = 0
-arch = 'gat-plus'
+arch = 'gnn'
 epochs = 500
-dpt = 0.6
-lr = 3e-4
+dpt = 0.2
+lr = 1e-3
 lrs = 'anneal_cosine'
 heads = 8
 layers = 2
 hid = 512
-wd = 5e-4
+wd = 0.
 eval_len = 25
-qnorm = False
-qagg = False
+qnorm = True
+qagg = True
 merge = 'cat'
 use_wandb = True
 
 
-tags = 'axiv_gat_sched_quant'
+tags = 'axiv_gnn_sched_quant'
 qscheds = [
     'demon_decay', 'demon_growth',
     'exp_decay', 'exp_growth',
     'linear_decay', 'linear_growth',
     'cos_decay', 'cos_growth'
 ]
-nbs = ['4 8', '4 6']
+nbs = ['3 8', '3 6']
 ngbs = ['8 8', '6 6']
 cycles = [8]
 trials = 2
-save_name = './results/arxiv_gat_sched_test_00.json'
+save_name = './results/arxiv_qagg_gnn_sched_test_01.json'
+tmp_fn = '1arxiv.txt'
 
 def add_accs_to_results(results, name, accs):
     if name in results.keys():
@@ -54,7 +55,7 @@ for nb, ngb in zip(nbs, ngbs):
         if ps in ['demon_decay', 'exp_decay']:
             for c in cycles:
                 # run vertical flip trials
-                exp_name = f'arxiv_{arch}_{ps}_{nb[0]}_{nb[-1]}_{c}_vertical'
+                exp_name = f'arxiv_qagg1_{arch}_{ps}_{nb[0]}_{nb[-1]}_{c}_vertical'
                 for t in range(trials):
                     full_exp_name = exp_name + f'_{t}'
                     command = (
@@ -73,18 +74,18 @@ for nb, ngb in zip(nbs, ngbs):
                     if use_wandb:
                         command += f'--use-wandb --tags {tags} '
         
-                    os.system(command + ' > arxiv1_output.txt')
-                    with open('arxiv1_output.txt', 'r') as f:
+                    os.system(command + f' > {tmp_fn}')
+                    with open(tmp_fn, 'r') as f:
                         trn_output = f.readlines()
                     final_test_acc = float(trn_output[-3][-6:])
                     best_val_acc = float(trn_output[-2][-6:])
                     best_test_acc = float(trn_output[-1][-6:])
                     acc_list = [final_test_acc, best_val_acc, best_test_acc]
                     add_accs_to_results(results, exp_name, acc_list) 
-                    os.remove('arxiv1_output.txt')
+                    os.remove(tmp_fn)
                          
                 # run horizontal flip trials
-                exp_name = f'arxiv_{arch}_{ps}_{nb[0]}_{nb[-1]}_{c}_horizontal'
+                exp_name = f'arxiv_qagg1_{arch}_{ps}_{nb[0]}_{nb[-1]}_{c}_horizontal'
                 for t in range(trials):
                     full_exp_name = exp_name + f'_{t}'
                     command = (
@@ -102,19 +103,19 @@ for nb, ngb in zip(nbs, ngbs):
                         command += f'--quant-agg '
                     if use_wandb:
                         command += f'--use-wandb --tags {tags} '
-                    os.system(command + ' > arxiv1_output.txt')
-                    with open('arxiv1_output.txt', 'r') as f:
+                    os.system(command + f' > {tmp_fn}')
+                    with open(tmp_fn, 'r') as f:
                         trn_output = f.readlines()
                     final_test_acc = float(trn_output[-3][-6:])
                     best_val_acc = float(trn_output[-2][-6:])
                     best_test_acc = float(trn_output[-1][-6:])
                     acc_list = [final_test_acc, best_val_acc, best_test_acc]
                     add_accs_to_results(results, exp_name, acc_list) 
-                    os.remove('arxiv1_output.txt')
+                    os.remove(tmp_fn)
         else:
             for c in cycles:
                 # run vertical flip trials
-                exp_name = f'arxiv_{arch}_{ps}_{nb[0]}_{nb[-1]}_{c}'
+                exp_name = f'arxiv_qagg1_{arch}_{ps}_{nb[0]}_{nb[-1]}_{c}'
                 for t in range(trials):
                     full_exp_name = exp_name + f'_{t}'
                     command = (
@@ -132,12 +133,12 @@ for nb, ngb in zip(nbs, ngbs):
                         command += f'--quant-agg '
                     if use_wandb:
                         command += f'--use-wandb --tags {tags} '
-                    os.system(command + ' > arxiv1_output.txt')
-                    with open('arxiv1_output.txt', 'r') as f:
+                    os.system(command + f' > {tmp_fn}')
+                    with open(tmp_fn, 'r') as f:
                         trn_output = f.readlines()
                     final_test_acc = float(trn_output[-3][-6:])
                     best_val_acc = float(trn_output[-2][-6:])
                     best_test_acc = float(trn_output[-1][-6:])
                     acc_list = [final_test_acc, best_val_acc, best_test_acc]
                     add_accs_to_results(results, exp_name, acc_list) 
-                    os.remove('arxiv1_output.txt')
+                    os.remove(tmp_fn)

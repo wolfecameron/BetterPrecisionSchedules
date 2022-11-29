@@ -6,8 +6,8 @@ import torch
 # 'critlearn_{dataset}_{arch}_{lr_sched}_{dit}_{t}/'
 
 res_base = './quant_results/'
-base_name = 'cifar10_cifar10_resnet_74_clprobe'
-exclude_str = 'nothing'
+base_name = 'cifar10_cifar10_clprobe'
+exclude_str = 'none'
 model_name = 'cifar10_resnet_74/'
 perf_file_name = 'best_results.pth'
 cost_file_name = 'best_results.pth'
@@ -21,6 +21,9 @@ for x in all_path:
         exp_str = exp_str + flip
     else:
         exp_str = x[len(base_name) + 1:-2]
+    print(x)
+    print(exp_str)
+    input()
    
     fullp = os.path.join(os.path.join(res_base, x), f'{model_name}')
     if not exp_str in all_path_grouped.keys():
