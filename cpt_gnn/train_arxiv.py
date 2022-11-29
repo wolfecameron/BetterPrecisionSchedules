@@ -163,6 +163,7 @@ def main():
                 norm_attn=args.norm_attn, use_classif_layer=args.use_classif_layer).to(device)
     else:
         raise NotImplementedError()
+
     vals, tests = [], []
     optimizer = torch.optim.Adam(
             model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
