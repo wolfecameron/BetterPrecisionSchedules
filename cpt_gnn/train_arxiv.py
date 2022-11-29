@@ -109,9 +109,13 @@ def main():
 
     if args.use_wandb:
         wandb_run = wandb.init(project="gnn-quant", entity="cameron-research", name=args.exp_name,
-                tags=args.tags)
+                tags=args.tags, config={})
         wandb_run.define_metric(
                 name=f'Loss',
+                step_metric='Epoch',
+        )
+        wandb_run.define_metric(
+                name=f'Num Bits',
                 step_metric='Epoch',
         )
         wandb_run.define_metric(
@@ -122,7 +126,7 @@ def main():
                 name=f'Validation Accuracy',
                 step_metric='Epoch',
         )
-        wandb.config = args.__dict__
+        wandb.config.update(args)
 
     device = f'cuda:{args.gpu}' if torch.cuda.is_available() else 'cpu'
     device = torch.device(device)
@@ -177,6 +181,7 @@ def main():
         if args.use_wandb:
             wandb.log({
                     f"Loss": loss,
+                    f"Num Bits": args.num_bits,
                     f"Epoch": epoch,
             })
         if epoch % args.test_freq == 0 or epoch == args.n_epochs:

@@ -1,7 +1,7 @@
 import os
 import json
 
-gpu = 1
+gpu = 0
 bs = 1024
 neighbors = 32
 epochs = 80
@@ -12,7 +12,7 @@ lrs = 'anneal_cosine'
 hid = 512
 wd = 1e-4
 qagg = False
-use_wandb = False
+use_wandb = True
 
 
 tags = 'amazon_sage_sched'
@@ -22,11 +22,11 @@ qscheds = [
     'linear_decay', 'linear_growth',
     'cos_decay', 'cos_growth'
 ]
-nbs = ['3 8', '3 6']
+nbs = ['4 8', '4 6']
 ngbs = ['8 8', '6 6']
 c = 8
 trials = 2
-save_name = './results/amazon_sage_sched_00.json'
+save_name = './results/amazon_sage_sched_01.json'
 tmp_fn = 'sage_amazon_res0.txt'
 
 def add_accs_to_results(results, name, accs):
