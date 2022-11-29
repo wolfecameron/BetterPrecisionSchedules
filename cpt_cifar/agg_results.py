@@ -3,10 +3,10 @@ import os
 import numpy as np
 import torch
 
-res_base = '/data/crw13/quant_results/'
-base_name = 'cifar100_cifar100_resnet_74_piecewise-no-def-decay'
+res_base = './quant_results/'
+base_name = 'cifar10_cifar10_mobilenet_v2_exp'
 exclude_str = 'nothing'
-model_name = 'cifar100_resnet_74/'
+model_name = 'cifar10_mobilenet_v2/'
 perf_file_name = 'best_results.pth'
 cost_file_name = 'best_results.pth'
 
@@ -35,6 +35,7 @@ for k in sorted(list(all_path_grouped.keys())):
         all_res.append(acc_res['best_prec1'])
         cost_res = torch.load(os.path.join(fn, cost_file_name))
         all_cost.append(cost_res['train_mets'][2])
+    print(all_res)
     all_res = np.array(all_res)
     all_cost = np.array(all_cost)
     print(f'\n{k} --> {np.mean(all_res):.2f} +- {np.std(all_res):.2f}, {np.mean(all_cost):.4f} +- {np.std(all_cost):.4f}')
