@@ -3,6 +3,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from dgl.nn import SAGEConv, GraphConv
 
 from modules.quantize import QGraphConv, MultiHeadQGATLayer, SAGEQConv
 
@@ -52,6 +53,24 @@ class QGraphSAGE(nn.Module):
         # second SAGE layer
         h_dst = h[:mfgs[1].num_dst_nodes()]
         h = self.conv2(mfgs[1], (h, h_dst), num_bits, num_grad_bits)
+        return h
+
+class GraphSAGE(nn.Module):
+    def __init__(self, in_feats, h_feats, num_classes, mfgs):
+        super().__init__()
+        self.conv1 = SAGEConv(in_feats, h_feats, aggregator_type='mean')
+        self.conv2 = SAGEConv(h_feats, num_classes, aggregator_type='mean')
+        self.h_feats = h_feats
+        self.mfgs = mfgs
+
+    def forward(self, x):
+        # Lines that are changed are marked with an arrow: "<---"
+
+        h_dst = x[:self.mfgs[0].num_dst_nodes()]  # <---
+        h = self.conv1(self.mfgs[0], (x, h_dst))  # <---
+        h = F.relu(h)
+        h_dst = h[:self.mfgs[1].num_dst_nodes()]  # <---
+        h = self.conv2(self.mfgs[1], (h, h_dst))  # <---
         return h
 
 
