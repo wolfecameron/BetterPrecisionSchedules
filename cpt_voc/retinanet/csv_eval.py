@@ -62,7 +62,7 @@ def _compute_ap(recall, precision):
     return ap
 
 
-def _get_detections(dataset, retinanet, score_threshold=0.05, max_detections=100, save_path=None):
+def _get_detections(dataset, retinanet, score_threshold=0.05, max_detections=100, save_path=None, num_bits=8, num_grad_bits=8):
     """ Get the detections from the retinanet using the generator.
     The result is a list of lists such that the size is:
         all_detections[num_images][num_classes] = detections[num_detections, 4 + num_classes]
@@ -72,6 +72,8 @@ def _get_detections(dataset, retinanet, score_threshold=0.05, max_detections=100
         score_threshold : The score confidence threshold to use.
         max_detections  : The maximum number of detections to use per image.
         save_path       : The path to save the images with visualized detections to.
+        num_bits        : precision of retinanet forward pass
+        num_grad_bits   : precision of retinanet backward pass (no gradient computed here, but need a placeholder)
     # Returns
         A list of lists containing the detections for each image in the generator.
     """
@@ -87,9 +89,13 @@ def _get_detections(dataset, retinanet, score_threshold=0.05, max_detections=100
 
             # run network
             if torch.cuda.is_available():
-                scores, labels, boxes = retinanet(data['img'].permute(2, 0, 1).cuda().float().unsqueeze(dim=0))
+                scores, labels, boxes = retinanet(
+                        data['img'].permute(2, 0, 1).cuda().float().unsqueeze(dim=0),
+                        num_bits=num_bits, num_grad_bits=num_grad_bits)
             else:
-                scores, labels, boxes = retinanet(data['img'].permute(2, 0, 1).float().unsqueeze(dim=0))
+                scores, labels, boxes = retinanet(
+                    data['img'].permute(2, 0, 1).float().unsqueeze(dim=0),
+                    num_bits=num_bits, num_grad_bits=num_grad_bits)
             scores = scores.cpu().numpy()
             labels = labels.cpu().numpy()
             boxes  = boxes.cpu().numpy()
@@ -155,7 +161,9 @@ def evaluate(
     iou_threshold=0.5,
     score_threshold=0.05,
     max_detections=100,
-    save_path=None
+    save_path=None,
+    num_bits=8, 
+    num_grad_bits=8,
 ):
     """ Evaluate a given dataset using a given retinanet.
     # Arguments
@@ -173,7 +181,8 @@ def evaluate(
 
     # gather all detections and annotations
 
-    all_detections     = _get_detections(generator, retinanet, score_threshold=score_threshold, max_detections=max_detections, save_path=save_path)
+    all_detections = _get_detections(generator, retinanet, score_threshold=score_threshold,
+            max_detections=max_detections, save_path=save_path, num_bits=num_bits, num_grad_bits=num_grad_bits)
     all_annotations    = _get_annotations(generator)
 
     average_precisions = {}
@@ -233,25 +242,25 @@ def evaluate(
         average_precisions[label] = average_precision, num_annotations
 
 
-    print('\nmAP:')
-    for label in range(generator.num_classes()):
-        label_name = generator.label_to_name(label)
-        print('{}: {}'.format(label_name, average_precisions[label][0]))
-        print("Precision: ",precision[-1])
-        print("Recall: ",recall[-1])
+    # print('\nmAP:')
+    # for label in range(generator.num_classes()):
+    #     label_name = generator.label_to_name(label)
+    #     print('{}: {}'.format(label_name, average_precisions[label][0]))
+    #     print("Precision: ",precision[-1])
+    #     print("Recall: ",recall[-1])
         
-        if save_path!=None:
-            plt.plot(recall,precision)
-            # naming the x axis 
-            plt.xlabel('Recall') 
-            # naming the y axis 
-            plt.ylabel('Precision') 
+    #     if save_path!=None:
+    #         plt.plot(recall,precision)
+    #         # naming the x axis 
+    #         plt.xlabel('Recall') 
+    #         # naming the y axis 
+    #         plt.ylabel('Precision') 
 
-            # giving a title to my graph 
-            plt.title('Precision Recall curve') 
+    #         # giving a title to my graph 
+    #         plt.title('Precision Recall curve') 
 
-            # function to show the plot
-            plt.savefig(save_path+'/'+label_name+'_precision_recall.jpg')
+    #         # function to show the plot
+    #         plt.savefig(save_path+'/'+label_name+'_precision_recall.jpg')
 
 
 
