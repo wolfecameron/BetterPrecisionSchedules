@@ -1,5 +1,6 @@
 import argparse
 import collections
+import os
 
 import wandb
 
@@ -35,6 +36,7 @@ def main(args=None):
     parser.add_argument('--csv_classes', help='Path to file containing class list (see readme)')
     parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
     parser.add_argument('--save_model', help='Whether or not to persist the model to a file', action='store_true', default=False)
+    parser.add_argument('--save-path', default=None, type=str, help='Path to which to save results')
     parser.add_argument('--eval_len', help='How frequently to evaluate at end of epoch', type=int, default=5)
 
     parser.add_argument('--depth', help='Resnet depth, must be one of 18, 34, 50, 101, 152', type=int, default=50)
@@ -139,6 +141,10 @@ def main(args=None):
 
     print('Num training images: {}'.format(len(dataset_train)))
     all_mAPs = []
+    all_lrs = []
+    all_bits = []
+    all_grad_bits = []
+    all_losses = []
     for epoch_num in range(parser.epochs):
         print(f'Running Epoch {epoch_num} / {parser.epochs}')
 
@@ -158,6 +164,10 @@ def main(args=None):
                 'Num Bits': parser.num_bits,
                 'Num Grad Bits': parser.num_grad_bits,
             })
+        else:
+            all_lrs.append(_clr)
+            all_bits.append(parser.num_bits)
+            all_grad_bits.append(parser.num_grad_bits)
 
         retinanet.train()
         retinanet.freeze_bn()
@@ -217,6 +227,8 @@ def main(args=None):
                 'Classification Loss': float(np.mean(epoch_class_loss)),
                 'Regression Loss': float(np.mean(epoch_reg_loss)),
             })
+        else:
+            all_losses.append(float(np.mean(epoch_loss)))
 
         if parser.save_model:
             torch.save(retinanet, '{}_retinanet_{}.pt'.format(parser.dataset, epoch_num))
@@ -225,6 +237,17 @@ def main(args=None):
 
     if parser.save_model:
         torch.save(retinanet, 'model_final.pt')
+
+    # optionally save the results of training
+    if not parser.use_wandb and parser.save_path is not None:
+        results = {
+            'all_mAPs': all_mAPs,
+            'all_lrs': all_lrs,
+            'all_bits': all_bits,
+            'all_grad_bits': all_grad_bits,
+            'all_losses': all_losses,
+        }
+        torch.save(results, os.path.join(parser.save_path, f'{parser.exp_name}.pth'))
 
     print(f"Final Test mAP: {all_mAPs[-1]:.4f}")
     print(f"Best Test mAP: {max(all_mAPs):.4f}")

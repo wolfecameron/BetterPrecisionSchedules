@@ -1,7 +1,7 @@
 import os
 
 # setup
-gpu = 0
+gpu = 1
 workers = 4
 use_wandb = True
 tags = 'voc_baseline'
@@ -15,10 +15,10 @@ trials = 1
 
 # hparams
 depth = 18
-epochs = 150
+epochs = 120
 batch_size = 8
-lr = 3e-5
-use_lr_decay = False
+lr = 1e-5
+use_lr_decay = True
 
 # cpt params
 nbs = '8 8'
