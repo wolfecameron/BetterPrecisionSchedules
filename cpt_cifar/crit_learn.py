@@ -101,7 +101,8 @@ def parse_args():
                 project='cnn-quant',
                 entity='cameron-research',
                 name=args.exp_name,
-                tags=args.tags
+                tags=args.tags,
+                config={},
         )
         wandb_run.define_metric(
                 name=f'Training Loss',
@@ -127,7 +128,7 @@ def parse_args():
                 name=f'Learning Rate',
                 step_metric='Iteration',
         )
-        wandb.config = args.__dict__
+        wandb.config.update(args)
 
     return args
 

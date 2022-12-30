@@ -4,7 +4,7 @@ import os
 
 gpu = 1
 arch = 'gnn'
-epochs = 500
+epochs = 1000
 dpt = 0.2
 lr = 1e-3
 #lrs_list = ['fixed', 'piecewise', 'anneal_cosine']
@@ -15,11 +15,11 @@ hid = 512
 wd = 0.
 eval_len = 25
 qsched = 'fixed'
-nbs_list = ['8 8', '6 6']
-ngbs_list = ['8 8', '6 6']
+nbs_list = ['8 8']
+ngbs_list = ['8 8']
 trials = 2
-qnorm = True
-qagg = True
+qnorm = False
+qagg = False
 dpt_inp = True
 dpt_attn = True
 merge = 'cat'
@@ -28,7 +28,7 @@ tags = 'gnn_arxiv_baseline'
 for nbs, ngbs in zip(nbs_list, ngbs_list):
     num_bit = nbs[-1]
     for trial in range(trials):
-        exp_name = f'ogbarxiv_qagg_baseline_{num_bit}bit_{trial}'
+        exp_name = f'ogbarxiv_longtrn_fpagg_baseline_{num_bit}bit_{trial}'
         command = (
             f'CUDA_VISIBLE_DEVICES={gpu} python train_arxiv.py --arch {arch} --exp-name {exp_name} '
             f'--n-layers {layers} --n-hidden {hid} --dropout {dpt} --lr {lr} --lr-schedule {lrs} '

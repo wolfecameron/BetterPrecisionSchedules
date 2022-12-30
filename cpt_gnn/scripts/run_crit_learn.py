@@ -1,24 +1,26 @@
 import os
 import json
 
-gpu = 0
-def_iters = [100, 200, 300, 400, 500]
-iters = [x + 500 for x in def_iters]
-trials = 2
+gpu = 1
+def_iters = [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
+iters = [x + 1000 for x in def_iters]
+trials = 1
 
-dpt = 0.5
+dpt = 0.2
 lr = 1e-3
-lrs = 'cosine-no-def-decay'
+lrs = 'cosine'
 layers = 2
 hid = 512
-wd = 5e-4
+wd = 0.
 eval_len = 25
+use_wandb = True
+tags = 'gnn_arxiv_critlearn'
 
 num_bits = '3 8'
 num_grad_bits = '8 8'
 max_bit = num_bits[-1]
 min_bit = num_bits[0]
-save_name = f'/data/crw13/gnn_quant/arxiv_crit_learn_{min_bit}_{max_bit}_nodefdecay_00.json'
+save_name = f'./results/arxiv_crit_learn_{min_bit}_{max_bit}_cosdecay_01.json'
 
 def add_accs_to_results(results, name, accs):
     if name in results.keys():
@@ -47,6 +49,8 @@ for it, dit in zip(iters, def_iters):
             f'--def-epochs {dit} --cyclic_num_bits_schedule {num_bits} '
             f'--cyclic_num_grad_bits_schedule {num_grad_bits} '
         )
+        if use_wandb:
+            command += f'--use-wandb --tags {tags} '
         os.system(command + ' > arxiv_cl_output.txt')
         with open('arxiv_cl_output.txt', 'r') as f:
             trn_output = f.readlines()

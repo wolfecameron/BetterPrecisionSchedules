@@ -1,6 +1,7 @@
 # training script for ogbn arxiv
 
 import argparse
+import wandb
 
 import torch
 import torch.nn.functional as F
@@ -77,7 +78,44 @@ def main():
                         help='num bits for weight and activation')
     parser.add_argument('--num_grad_bits', default=0, type=int,
                         help='num bits for gradient')
+
+    parser.add_argument('--use-wandb', action='store_true', default=False)
+    parser.add_argument('--tags', type=str, action='append', default=None)
     args = parser.parse_args()
+
+    if args.use_wandb:
+        wandb_run = wandb.init(
+                project='gnn-quant',
+                entity='cameron-research',
+                name=args.exp_name,
+                tags=args.tags,
+                config={},
+        )
+        wandb_run.define_metric(
+                name=f'Training Loss',
+                step_metric='Epoch',
+        )
+        wandb_run.define_metric(
+                name=f'Test Accuracy',
+                step_metric='Epoch',
+        )
+        wandb_run.define_metric(
+                name='Validation Accuracy',
+                step_metric='Epoch',
+        )
+        wandb_run.define_metric(
+                name=f'Num Bits',
+                step_metric='Epoch',
+        )
+        wandb_run.define_metric(
+                name=f'Num Grad Bits',
+                step_metric='Epoch',
+        )
+        wandb_run.define_metric(
+                name=f'Learning Rate',
+                step_metric='Epoch',
+        )
+        wandb.config.update(args)
 
     device = f'cuda:{args.gpu}' if torch.cuda.is_available() else 'cpu'
     device = torch.device(device)
@@ -116,6 +154,15 @@ def main():
         cyclic_adjust_precision(args, epoch)
 
         loss = train(args, g, model, train_idx, optimizer, labels)
+        if args.use_wandb:
+            wandb.log({
+                'Epoch': epoch,
+                'Num Bits': args.num_bits,
+                'Num Grad Bits': args.num_grad_bits,
+                'Training Loss': float(loss),
+            })
+
+        # evaluation  
         if epoch % args.test_freq == 0 or epoch == args.n_epochs:
             result = test(args, g, model, labels, split_idx, evaluator)
             _, val, tst = result
@@ -124,6 +171,12 @@ def main():
             if args.verbose:
                 print(f'\tVal Acc: {vals[-1]:.4f}')
                 print(f'\tTest Acc: {tests[-1]:.4f}')
+            if args.use_wandb:
+                wandb.log({
+                    'Epoch': epoch,
+                    'Test Accuracy': tst,
+                    'Validation Accuracy': val,
+                })
 
     print(f"Final Test Accuracy: {tests[-1]:.4f}")
     print(f"Best Val Accuracy: {max(vals):.4f}")
@@ -136,7 +189,7 @@ def cyclic_adjust_precision(args, _epoch):
     num_grad_bit_min = args.cyclic_num_grad_bits_schedule[0]
     num_grad_bit_max = args.cyclic_num_grad_bits_schedule[1]
 
-    if _epoch <= args.def_epochs:
+    if _epoch < args.def_epochs:
         args.num_bits = num_bit_min
     else:
         args.num_bits = num_bit_max
@@ -190,6 +243,12 @@ def adjust_learning_rate(args, optimizer, _epoch):
 
     if _epoch % args.eval_every == 0:
         print('Epoch [{}] learning rate = {}'.format(_epoch, lr))
+
+    if args.use_wandb:
+        wandb.log({
+            'Epoch': _epoch,
+            'Learning Rate': lr,
+        })
 
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr

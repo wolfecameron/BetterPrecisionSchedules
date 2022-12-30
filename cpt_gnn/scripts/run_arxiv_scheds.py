@@ -14,8 +14,8 @@ layers = 2
 hid = 512
 wd = 0.
 eval_len = 25
-qnorm = True
-qagg = True
+qnorm = False
+qagg = False
 merge = 'cat'
 use_wandb = True
 
@@ -31,7 +31,7 @@ nbs = ['3 8', '3 6']
 ngbs = ['8 8', '6 6']
 cycles = [8]
 trials = 2
-save_name = './results/arxiv_qagg_gnn_sched_test_01.json'
+save_name = './results/arxiv_fpagg_gnn_sched_test_00.json'
 tmp_fn = '1arxiv.txt'
 
 def add_accs_to_results(results, name, accs):
@@ -55,7 +55,7 @@ for nb, ngb in zip(nbs, ngbs):
         if ps in ['demon_decay', 'exp_decay']:
             for c in cycles:
                 # run vertical flip trials
-                exp_name = f'arxiv_qagg1_{arch}_{ps}_{nb[0]}_{nb[-1]}_{c}_vertical'
+                exp_name = f'arxiv_fpagg_{arch}_{ps}_{nb[0]}_{nb[-1]}_{c}_vertical'
                 for t in range(trials):
                     full_exp_name = exp_name + f'_{t}'
                     command = (
@@ -85,7 +85,7 @@ for nb, ngb in zip(nbs, ngbs):
                     os.remove(tmp_fn)
                          
                 # run horizontal flip trials
-                exp_name = f'arxiv_qagg1_{arch}_{ps}_{nb[0]}_{nb[-1]}_{c}_horizontal'
+                exp_name = f'arxiv_fpagg_{arch}_{ps}_{nb[0]}_{nb[-1]}_{c}_horizontal'
                 for t in range(trials):
                     full_exp_name = exp_name + f'_{t}'
                     command = (
@@ -115,7 +115,7 @@ for nb, ngb in zip(nbs, ngbs):
         else:
             for c in cycles:
                 # run vertical flip trials
-                exp_name = f'arxiv_qagg1_{arch}_{ps}_{nb[0]}_{nb[-1]}_{c}'
+                exp_name = f'arxiv_fpagg_{arch}_{ps}_{nb[0]}_{nb[-1]}_{c}'
                 for t in range(trials):
                     full_exp_name = exp_name + f'_{t}'
                     command = (
