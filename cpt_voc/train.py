@@ -154,10 +154,10 @@ def main(args=None):
                 pg['lr'] = pg['lr'] * 0.1
 
         # log lr/precision to wandb 
+        for pg in optimizer.param_groups:
+            _clr = pg['lr']
+            break
         if parser.use_wandb:
-            for pg in optimizer.param_groups:
-                _clr = pg['lr']
-                break
             wandb.log({
                 'Epoch': epoch_num,
                 'Learning Rate': _clr,

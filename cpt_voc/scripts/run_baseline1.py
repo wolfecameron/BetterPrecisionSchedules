@@ -1,7 +1,7 @@
 import os
 
 # setup
-gpu = 0
+gpu = 1
 workers = 4
 use_wandb = True
 tags = 'voc_baseline'
@@ -21,8 +21,8 @@ lr = 1e-5
 use_lr_decay = False
 
 # cpt params
-nbs = '8 8'
-ngbs = '8 8'
+nbs = '6 6'
+ngbs = '6 6'
 n = 8
 ps = 'fixed'
 

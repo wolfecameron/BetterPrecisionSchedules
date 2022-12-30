@@ -2,7 +2,7 @@ import os
 import json
 
 # setup
-gpu = 0
+gpu = 1
 workers = 4
 use_wandb = True
 tags = 'voc_scheds'
@@ -31,8 +31,8 @@ qscheds = [
     'linear_decay', 'linear_growth',
     'cos_decay', 'cos_growth'
 ]
-nbs_list = ['5 8']
-ngbs_list = ['8 8']
+nbs_list = ['5 6']
+ngbs_list = ['6 6']
 
 def add_to_results(results, name, accs):
     if name in results.keys():
