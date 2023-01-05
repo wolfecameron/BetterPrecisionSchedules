@@ -13,14 +13,14 @@ csv_train = '/home/exx/data/VOCdevkit/VOC2012/CSVFormat/train.csv'
 csv_classes = '/home/exx/data/VOCdevkit/VOC2012/CSVFormat/class_map.csv'
 csv_val = '/home/exx/data/VOCdevkit/VOC2012/CSVFormat/val.csv'
 trials = 2
-save_name = './results/voc_sched_00.json'
-tmp_fn = 'voc_sched_00.txt'
+save_name = './results/deep_voc_sched_6_00.json'
+tmp_fn = 'voc_sched_01.txt'
 
 # hparams
-depth = 18
+depth = 101
 epochs = 120
-batch_size = 8
-lr = 1e-5
+batch_size = 2
+lr = 3e-6
 use_lr_decay = False
 
 # cpt params

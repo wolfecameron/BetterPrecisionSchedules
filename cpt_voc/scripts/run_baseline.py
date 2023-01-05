@@ -14,9 +14,9 @@ csv_val = '/home/exx/data/VOCdevkit/VOC2012/CSVFormat/val.csv'
 trials = 2
 
 # hparams
-depth = 18
+depth = 101
 epochs = 120
-batch_size = 8
+batch_size = 4
 lr = 1e-5
 use_lr_decay = False
 
