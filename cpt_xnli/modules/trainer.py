@@ -25,6 +25,8 @@ class QuantTrainer(Trainer):
     ):
         super().__init__(model, args, data_collator, train_dataset, eval_dataset, tokenizer, model_init,
                 compute_metrics, callbacks, optimizers, preprocess_logits_for_metrics)
+        
+        # track the number of training iters for the quantization schedule
         self._curr_iter = 0
 
     def training_step(self, model, inputs):
@@ -32,8 +34,9 @@ class QuantTrainer(Trainer):
         cyclic_adjust_precision(model.args, self._curr_iter, model.args.cyclic_period)
         if (self._curr_iter % 100) == 0:
             wandb.log({
-                'num_bits': model.args.num_bits,
-                'num_grad_bits': model.args.num_grad_bits,
+                'train/train_step': self._curr_iter,
+                'train/num_bits': model.args.num_bits,
+                'train/num_grad_bits': model.args.num_grad_bits,
             })
 
         model.train()

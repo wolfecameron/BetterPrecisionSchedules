@@ -15,15 +15,16 @@ lr = 5e-5
 epochs = 2.0
 
 # exp settings
-exp_name = 'xnli_ft'
-trials = 1
+trials = 2
 
 # cpt settings
 ps = 'fixed'
 nbs = '8 8'
 ngbs = '8 8'
-n = 8
+n = 2
 
+# run trials
+exp_name = 'xnli_ft_{nbs[0]}bits'
 for t in range(trials):
     full_exp_name = f'{exp_name}_{t}'
     output_dir = f'/data/crw13_data/xnli_results/{full_exp_name}'

@@ -53,6 +53,7 @@ from transformers.utils.versions import require_version
 from models import QBertForSequenceClassification
 from modules.utils import safe_load_dict
 from modules.trainer import QuantTrainer
+from modules.callbacks import CustWandbCallback
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.16.0.dev0")
@@ -424,6 +425,7 @@ def main():
         compute_metrics=compute_metrics,
         tokenizer=tokenizer,
         data_collator=data_collator,
+        callbacks=[CustWandbCallback()],
     )
 
     # Training
