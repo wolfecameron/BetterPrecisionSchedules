@@ -20,7 +20,8 @@
 from gc import callbacks
 import logging
 import os
-os.environ["WANDB_DISABLED"] = "true"
+os.environ["WANDB_DISABLED"] = "false"
+os.environ["WANDB_PROJECT"] = "language-quant"
 import random
 import sys
 from dataclasses import dataclass, field
@@ -51,8 +52,8 @@ from transformers.utils.versions import require_version
 
 from models import QBertForSequenceClassification
 from modules.utils import safe_load_dict
-from modules.callbacks import QuantCallback
-
+from modules.trainer import QuantTrainer
+from modules.callbacks import CustWandbCallback
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.16.0.dev0")
@@ -121,7 +122,7 @@ class QTrainingArguments(TrainingArguments):
             "help": "for triangular schedules, whether to reflect the profile horizontally or vertically",
         },
     )
-    total_iters: Optional[int] = field(
+    cyclic_period: Optional[int] = field(
         default=None,
         metadata={
             "help": "total number of iterations performed during training",
@@ -265,18 +266,18 @@ def main():
 
     # Detecting last checkpoint.
     last_checkpoint = None
-    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
-        last_checkpoint = get_last_checkpoint(training_args.output_dir)
-        if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
-            raise ValueError(
-                f"Output directory ({training_args.output_dir}) already exists and is not empty. "
-                "Use --overwrite_output_dir to overcome."
-            )
-        elif last_checkpoint is not None:
-            logger.info(
-                f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
-                "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
-            )
+    #if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+    #    last_checkpoint = get_last_checkpoint(training_args.output_dir)
+    #    if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
+    #        raise ValueError(
+    #            f"Output directory ({training_args.output_dir}) already exists and is not empty. "
+    #            "Use --overwrite_output_dir to overcome."
+    #        )
+    #    elif last_checkpoint is not None:
+    #        logger.info(
+    #            f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
+    #            "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
+    #        )
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
@@ -410,14 +411,13 @@ def main():
     else:
         data_collator = None
 
-    # setup all callbacks
-    training_args.total_iters = (int(len(train_dataset) // training_args.per_device_train_batch_size) + 1) * training_args.num_train_epochs
-    input(f'num iters: {training_args.total_iters}')
-    callbacks = [QuantCallback()]
+    # set up quantization cycle lengths 
+    total_iters = (int(len(train_dataset) // training_args.per_device_train_batch_size) + 1) * training_args.num_train_epochs
+    training_args.cyclic_period = (total_iters // training_args.num_cyclic_period) + 1
 
 
     # Initialize our Trainer
-    trainer = Trainer(
+    trainer = QuantTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
@@ -425,7 +425,7 @@ def main():
         compute_metrics=compute_metrics,
         tokenizer=tokenizer,
         data_collator=data_collator,
-        callbacks=callbacks,
+        callbacks=[CustWandbCallback()],
     )
 
     # Training

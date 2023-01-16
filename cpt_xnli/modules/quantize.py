@@ -194,8 +194,8 @@ class QuantMeasure(nn.Module):
 
 
 class QLinear(nn.Linear):
-    def __init__(self, in_features, out_features, bias=True, device=None, dtype=None):
-        super(QLinear, self).__init__(in_features, out_features, bias, device, dtype)
+    def __init__(self, in_features, out_features, bias=True):
+        super().__init__(in_features, out_features, bias=bias)
         self.quantize_input = QuantMeasure(shape_measure=(1, 1), flatten_dims=(0, -1))
 
     def forward(self, x, num_bits, num_grad_bits):
