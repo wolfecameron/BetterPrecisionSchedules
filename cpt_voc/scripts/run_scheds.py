@@ -14,7 +14,7 @@ csv_classes = '/home/exx/data/VOCdevkit/VOC2012/CSVFormat/class_map.csv'
 csv_val = '/home/exx/data/VOCdevkit/VOC2012/CSVFormat/val.csv'
 trials = 2
 save_name = './results/voc_sched_00.json'
-tmp_fn = 'voc_sched_00.txt'
+tmp_fn = 'voc_sched_001.txt'
 
 # hparams
 depth = 18
