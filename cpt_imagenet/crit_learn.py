@@ -18,7 +18,6 @@ import models
 from modules.data import *
 
 
-
 model_names = sorted(name for name in models.__dict__
                      if name.islower() and not name.startswith('__')
                      and callable(models.__dict__[name])
@@ -31,7 +30,6 @@ def parse_args():
         description='PyTorch ImageNet training with CPT')
     parser.add_argument('--exp-name', type=str, default='cl_cnn_00')
     parser.add_argument('--dir', help='annotate the working directory')
-    parser.add_argument('--cmd', choices=['train', 'test'], default='train')
     parser.add_argument('--arch', metavar='ARCH', default='resnet50',
                         choices=model_names,
                         help='model architecture: ' +
@@ -47,8 +45,6 @@ def parse_args():
     parser.add_argument('--epoch', default=120, type=int,
                         help='number of epochs (default: 90)')
     parser.add_argument('--def-epochs', default=30, type=int)
-    parser.add_argument('--start_epoch', default=0, type=int,
-                        help='manual iter number (useful on restarts)')
     parser.add_argument('--batch_size', default=256, type=int,
                         help='mini-batch size (default: 128)')
     parser.add_argument('--lr_schedule', default='piecewise', type=str,
@@ -59,36 +55,23 @@ def parse_args():
                         help='momentum')
     parser.add_argument('--weight_decay', default=1e-4, type=float,
                         help='weight decay (default: 1e-4)')
-    parser.add_argument('--print_freq', default=10, type=int,
-                        help='print frequency (default: 10)')
-    parser.add_argument('--resume', default='', type=str,
-                        help='path to  latest checkpoint (default: None)')
     parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                         help='use pretrained model')
     parser.add_argument('--step_ratio', default=0.1, type=float,
                         help='ratio for learning rate deduction')
-    parser.add_argument('--warm_up', action='store_true',
-                        help='for n = 18, the model needs to warm up for 400 '
-                             'iterations')
     parser.add_argument('--save_folder', default='save_checkpoints',
                         type=str,
                         help='folder to save the checkpoints')
-    parser.add_argument('--eval_every', default=390, type=int,
-                        help='evaluate model every (default: 1000) iterations')
 
     parser.add_argument('--num_bits',default=0,type=int,
                         help='num bits for weight and activation')
     parser.add_argument('--num_grad_bits',default=0,type=int,
                         help='num bits for gradient')
-    #parser.add_argument('--num_bits_schedule',default=None,type=int,nargs='*',
-    #                    help='schedule for weight/act precision')
 
     parser.add_argument('--cyclic_num_bits_schedule', default=None, type=int, nargs='*',
                         help='cyclic schedule for weight/act precision')
     parser.add_argument('--cyclic_num_grad_bits_schedule', default=None, type=int, nargs='*',
                         help='cyclic schedule for grad precision')
-    parser.add_argument('--automatic_resume', action='store_true',
-                        help='automatically resume from latest checkpoint')
     parser.add_argument('--use-wandb', action='store_true', default=False)
     parser.add_argument('--tags', type=str, action='append', default=None)
     args = parser.parse_args()
@@ -133,73 +116,28 @@ def parse_args():
 def main():
     args = parse_args()
     global save_path
-    save_path = args.save_path = os.path.join(args.save_folder,
-                                              "{}_num_bit_{}_{}_grad_bit_{}_{}".format(args.arch,
-                                                                                       args.cyclic_num_bits_schedule[0],
-                                                                                       args.cyclic_num_bits_schedule[1],
-                                                                                       args.cyclic_num_grad_bits_schedule[0],
-                                                                                       args.cyclic_num_grad_bits_schedule[1]))
+    save_path = args.save_path = os.path.join(args.save_folder, "{}_num_bit_{}_{}_grad_bit_{}_{}".format(
+            args.arch, args.cyclic_num_bits_schedule[0], args.cyclic_num_bits_schedule[1],
+            args.cyclic_num_grad_bits_schedule[0], args.cyclic_num_grad_bits_schedule[1]))
     if not os.path.exists(save_path):
         os.makedirs(save_path)
-
-    # config logging file
-    args.logger_file = os.path.join(save_path, 'log_{}.txt'.format(args.cmd))
-    if os.path.exists(args.logger_file):
-        os.remove(args.logger_file)
-    handlers = [logging.FileHandler(args.logger_file, mode='w'),
-                logging.StreamHandler()]
-    logging.basicConfig(level=logging.INFO,
-                        datefmt='%m-%d-%y %H:%M',
-                        format='%(asctime)s:%(message)s',
-                        handlers=handlers)
-
-    if args.cmd == 'train':
-        logging.info('start training {}'.format(args.arch))
-        run_training(args)
-
-    elif args.cmd == 'test':
-        logging.info('start evaluating {} with checkpoints from {}'.format(
-            args.arch, args.resume))
-        test_model(args)
+    run_training(args)
 
 
 def run_training(args):
     model = models.__dict__[args.arch](args.pretrained)
-    model = torch.nn.DataParallel(model).cuda()
+    model = model.cuda()
+    # model = torch.nn.DataParallel(model).cuda()
 
     # track when your model achieves the best performance
     best_prec1 = 0
     best_epoch = 0
 
-    if args.automatic_resume:
-        latest_ckpt = os.path.join(args.save_path,'checkpoint_latest.pth.tar')
-        if os.path.exists(latest_ckpt):
-            checkpoint = torch.load(latest_ckpt)
-            args.start_epoch = checkpoint['epoch'] + 1
-            best_prec1 = checkpoint['best_prec1']
-            model.load_state_dict(checkpoint['state_dict'])
+    # the the input size to your network is not changing, this is good to set to True
+    # it will run a benchmark to figure out the best way to handle this size as fast as possible
+    # cudnn.benchmark = False
 
-            logging.info('Automatically load latest checkpoint (epoch: {})'.format(checkpoint['epoch']))
-
-        else:
-            logging.info('No latest checkpoint. Train from scratch.')
-
-    # optionally resume from a checkpoint
-    if args.resume:
-        if os.path.isfile(args.resume):
-            checkpoint = torch.load(args.resume)
-            args.start_epoch = checkpoint['epoch'] + 1
-            best_prec1 = checkpoint['best_prec1']
-            model.load_state_dict(checkpoint['state_dict'])
-
-            logging.info('=> loaded checkpoint `{}` (epoch: {})'.format(
-                args.resume, checkpoint['epoch']
-            ))
-        else:
-            logging.info('=> no checkpoint found at `{}`'.format(args.resume))
-
-    cudnn.benchmark = False
-
+    print(f'Getting dataloaders...')
     train_loader = prepare_train_data(dataset=args.dataset,
                                       datadir=args.datadir+'/train',
                                       batch_size=args.batch_size,
@@ -212,21 +150,20 @@ def run_training(args):
                                     num_workers=args.workers)
 
     # define loss function (criterion) and optimizer
-    criterion = nn.CrossEntropyLoss().cuda()
+    criterion = nn.CrossEntropyLoss()
 
     optimizer = torch.optim.SGD(model.parameters(), args.lr,
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay)
 
-    batch_time = AverageMeter()
-    data_time = AverageMeter()
-    losses = AverageMeter()
-    top1 = AverageMeter()
-    cr = AverageMeter()
-
-    end = time.time()
-
-    for _epoch in range(args.start_epoch, args.epoch):
+    all_lrs = []
+    all_bits = []
+    all_grad_bits = []
+    all_loss = []
+    all_acc = []
+    all_test_acc = []
+    print(f'Running training...')
+    for _epoch in range(args.epoch):
         # track metrics during training
         training_loss = 0
         training_acc = 0
@@ -241,190 +178,98 @@ def run_training(args):
                 'Num Bits': args.num_bits,
                 'Num Grad Bits': args.num_grad_bits,
             })
+        else:
+            all_lrs.append(lr)
+            all_bits.append(args.num_bits)
+            all_grad_bits.append(args.num_grad_bits)
 
-        print('Learning Rate:', lr)
-        print('num bits:', args.num_bits, 'num grad bits:', args.num_grad_bits)
+        print(f'\nRunning Epoch {_epoch}...')
+        print(f'\tLearning Rate: {lr}')
+        print(f'\tNum Bits: {args.num_bits}')
+        print(f'\tNum Grad Bits: {args.num_grad_bits}')
 
-        for i, (input, target) in enumerate(train_loader):
-            # measuring data loading time
-            data_time.update(time.time() - end)
+        model.train()
+        for i, (inp, tgt) in enumerate(train_loader):
+            try:
+                inp = inp.cuda()
+                tgt = tgt.long().cuda()
 
-            model.train()
+                # compute output
+                output = model(inp, args.num_bits, args.num_grad_bits)
+                loss = criterion(output, tgt)
 
-            fw_cost = args.num_bits*args.num_bits/32/32
-            eb_cost = args.num_bits*args.num_grad_bits/32/32
-            gc_cost = eb_cost
-            cr.update((fw_cost+eb_cost+gc_cost)/3)
+                # compute gradient and do SGD step
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
-            target = target.squeeze().long().cuda()
-            input_var = Variable(input).cuda()
-            target_var = Variable(target).cuda()
+                # measure accuracy and record loss
+                with torch.no_grad():
+                    prec1, = accuracy(output.data, tgt, topk=(1,))
+                    training_loss += loss.item()
+                    training_acc += prec1.item()  
+                    if (i  % 10) == 0:
+                        print(f'\rIter. [{i}/{len(train_loader)}]: Loss {loss:.4f}; Train Acc {prec1:.4f}', end='')
+            except:
+                print('Skipped iteration')
 
-            # compute output
-            output = model(input_var, args.num_bits, args.num_grad_bits)
-            loss = criterion(output, target_var)
-            training_loss += loss.item()
-
-            # measure accuracy and record loss
-            prec1, = accuracy(output.data, target, topk=(1,))
-            losses.update(loss.item(), input.size(0))
-            top1.update(prec1.item(), input.size(0))
-            training_acc += prec1.item()
-
-            # compute gradient and do SGD step
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            # measure elapsed time
-            batch_time.update(time.time() - end)
-            end = time.time()
-
-            # print log
-            if i % args.print_freq == 0:
-                logging.info("Iter: [{0}][{1}/{2}]\t"
-                             "Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t"
-                             "Data {data_time.val:.3f} ({data_time.avg:.3f})\t"
-                             "Loss {loss.val:.3f} ({loss.avg:.3f})\t"
-                             "Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t".format(
-                                _epoch,
-                                i,
-                                len(train_loader),
-                                batch_time=batch_time,
-                                data_time=data_time,
-                                loss=losses,
-                                top1=top1)
-                )
-
-
-        epoch = _epoch + 1
         epoch_loss = training_loss / len(train_loader)
         epoch_acc = training_acc / len(train_loader)
         with torch.no_grad():
-            prec1 = validate(args, test_loader, model, criterion, _epoch)
+            prec1 = validate(args, test_loader, model, criterion)
+
+        print(f'\nEpoch {_epoch} Results...')
+        print(f'\tLoss: {epoch_loss:.4f}')
+        print(f'\tTrain Acc: {epoch_acc:.4f}')
+        print(f'\tTest Acc: {prec1:.4f}')
 
         if args.use_wandb:
             wandb.log({
+                'Epoch': _epoch,
                 'Training Loss': epoch_loss,
                 'Training Accuracy': epoch_acc,
                 'Test Accuracy': prec1,
             })
-
-        logging.info('Epoch [{}] num_bits = {} num_grad_bits = {}'.format(epoch, args.num_bits, args.num_grad_bits))
+        else:
+            all_loss.append(epoch_loss)
+            all_acc.append(epoch_acc)
+            all_test_acc.append(prec1)
 
         is_best = prec1 > best_prec1
         if is_best:
             best_prec1 = max(prec1, best_prec1)
-            best_epoch = epoch
-
-        logging.info("Current Best Prec@1: {} ".format(best_prec1))
-        logging.info("Current Best Epoch: {}".format(best_epoch))
-
-        save_checkpoint = {
-            'epoch': _epoch,
-            'arch': args.arch,
-            'state_dict': model.state_dict(),
-            'best_prec1': best_prec1,
-            'train_mets': (losses.avg, top1.avg, cr.avg, cr.val),
+            best_epoch = _epoch
+    
+    if not args.use_wandb:
+        results = {
+            'lrs': all_lrs,
+            'bits': all_bits,
+            'grad_bits': all_grad_bits,
+            'loss': all_loss,
+            'acc': all_acc,
+            'test_acc': all_test_acc,
         }
-        torch.save(save_checkpoint, os.path.join(args.save_path, 'final_results.pth'))
-        if is_best:
-            torch.save(save_checkpoint, os.path.join(args.save_path, 'best_results.pth'))
+        save_fp = os.path.join(args.save_folder, 'result.pth')
+        torch.save(results, save_fp)
 
 
-def validate(args, test_loader, model, criterion, _epoch):
-    batch_time = AverageMeter()
-    losses = AverageMeter()
-    top1 = AverageMeter()
-
-    # switch to evaluation mode
+def validate(args, test_loader, model, criterion):
+    val_loss = 0.
+    val_acc = 0.
     model.eval()
-    end = time.time()
-    for i, (input, target) in enumerate(test_loader):
-        target = target.squeeze().long().cuda()
-        input_var = Variable(input, volatile=True).cuda()
-        target_var = Variable(target, volatile=True).cuda()
+    for i, (inp, tgt) in enumerate(test_loader):
+        inp = inp.cuda()
+        tgt = tgt.long().cuda()
 
         # compute output
-        output = model(input_var, args.num_bits, args.num_grad_bits)
-        loss = criterion(output, target_var)
+        output = model(inp, args.num_bits, args.num_grad_bits)
+        loss = criterion(output, tgt)
 
         # measure accuracy and record loss
-        prec1, = accuracy(output.data, target, topk=(1,))
-        top1.update(prec1.item(), input.size(0))
-        losses.update(loss.item(), input.size(0))
-        batch_time.update(time.time() - end)
-        end = time.time()
-
-        if (i % args.print_freq == 0) or (i == len(test_loader) - 1):
-            logging.info(
-                'Test: [{}/{}]\t'
-                'Time: {batch_time.val:.4f}({batch_time.avg:.4f})\t'
-                'Loss: {loss.val:.3f}({loss.avg:.3f})\t'
-                'Prec@1: {top1.val:.3f}({top1.avg:.3f})\t'.format(
-                    i, len(test_loader), batch_time=batch_time,
-                    loss=losses, top1=top1
-                )
-            )
-
-    logging.info('Epoch {} * Prec@1 {top1.avg:.3f}'.format(_epoch, top1=top1))
-    return top1.avg
-
-
-def test_model(args):
-    # create model
-    model = models.__dict__[args.arch](args.pretrained)
-    model = torch.nn.DataParallel(model).cuda()
-
-    if args.resume:
-        if os.path.isfile(args.resume):
-            logging.info('=> loading checkpoint `{}`'.format(args.resume))
-            checkpoint = torch.load(args.resume)
-            args.start_epoch = checkpoint['epoch']
-            best_prec1 = checkpoint['best_prec1']
-            model.load_state_dict(checkpoint['state_dict'])
-            logging.info('=> loaded checkpoint `{}` (epoch: {})'.format(
-                args.resume, checkpoint['epoch']
-            ))
-        else:
-            logging.info('=> no checkpoint found at `{}`'.format(args.resume))
-
-    cudnn.benchmark = False
-    test_loader = prepare_test_data(dataset=args.dataset,
-                                    batch_size=args.batch_size,
-                                    shuffle=False,
-                                    num_workers=args.workers)
-    criterion = nn.CrossEntropyLoss().cuda()
-
-    with torch.no_grad():
-        prec1 = validate(args, test_loader, model, criterion, args.start_iter)
-
-
-def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
-    torch.save(state, filename)
-    if is_best:
-        save_path = os.path.dirname(filename)
-        shutil.copyfile(filename, os.path.join(save_path,
-                                               'model_best.pth.tar'))
-
-
-class AverageMeter(object):
-    """Computes and stores the average and current value"""
-
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
+        prec1, = accuracy(output.data, tgt, topk=(1,))
+        val_acc += float(prec1)
+        val_loss += float(loss)
+    return val_acc / len(test_loader)
 
 
 def cyclic_adjust_precision(args, _epoch):
@@ -434,13 +279,11 @@ def cyclic_adjust_precision(args, _epoch):
     num_grad_bit_max = args.cyclic_num_grad_bits_schedule[1]
     assert num_grad_bit_min == num_grad_bit_max
 
-    if _epoch <= args.def_epochs:
+    if _epoch < args.def_epochs:
         args.num_bits = num_bit_min
     else:
         args.num_bits = num_bit_max
     args.num_grad_bits = num_grad_bit_max
-    if _epoch % args.eval_every == 0:
-        logging.info(f'Epoch {_epoch} num_bits = {args.num_bits} num_grad_bits = {args.num_grad_bits}')
 
 def adjust_learning_rate(args, optimizer, _epoch):
     if args.lr_schedule == 'piecewise':
@@ -469,9 +312,7 @@ def adjust_learning_rate(args, optimizer, _epoch):
     elif args.lr_schedule == 'linear':
         t = _epoch / args.epoch
         lr_ratio = 0.01
-        if args.warm_up and (_epoch < 15):
-            lr = 0.01
-        elif t < 0.5:
+        if t < 0.5:
             lr = args.lr
         elif t < 0.9:
             lr = args.lr * (1 - (1 - lr_ratio) * (t - 0.5) / 0.4)
@@ -485,9 +326,6 @@ def adjust_learning_rate(args, optimizer, _epoch):
 
     else:
         raise NotImplementedError(f'{args.lr_schedule} is not a supported lr schedule.')
-
-    if _epoch % args.eval_every == 0:
-        logging.info('Iter [{}] learning rate = {}'.format(_epoch, lr))
 
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
