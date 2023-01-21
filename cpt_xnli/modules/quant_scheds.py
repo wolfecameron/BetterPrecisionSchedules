@@ -59,6 +59,7 @@ def cyclic_adjust_precision(args, _iter, cyclic_period):
         args.num_grad_bits = calc_linear_growth(cyclic_period, _iter, num_grad_bit_min, num_grad_bit_max, discrete=True)
     else:
         raise NotImplementedError(f'{args.precision_schedule} is not a supported precision schedule.')
+    return args
 
 def calc_cos_decay(cyclic_period, curr_iter, min_val, max_val, discrete=True):
     assert min_val <= max_val

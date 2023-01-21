@@ -32,7 +32,7 @@ class QuantTrainer(Trainer):
     def training_step(self, model, inputs):
         # set num bits and num grad bits based on current quantization level
         cyclic_adjust_precision(model.args, self._curr_iter, model.args.cyclic_period)
-        if (self._curr_iter % 100) == 0:
+        if (self._curr_iter % 25) == 0:
             wandb.log({
                 'train/train_step': self._curr_iter,
                 'train/num_bits': model.args.num_bits,

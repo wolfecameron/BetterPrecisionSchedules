@@ -11,7 +11,7 @@ lang = 'de'
 train_lang = 'de'
 
 # hparams
-lr = 5e-5
+lr = 1e-5
 epochs = 2.0
 
 # exp settings
@@ -19,8 +19,8 @@ trials = 2
 
 # cpt settings
 ps = 'fixed'
-nbs = '8 8'
-ngbs = '8 8'
+nbs = '6 6'
+ngbs = '6 6'
 n = 2
 
 # run trials
@@ -36,6 +36,6 @@ for t in range(trials):
         f'--output_dir {output_dir} --overwrite_output_dir --precision_schedule {ps} '
         f'--num_bits_min {nbs[0]} --num_bits_max {nbs[-1]} --num_grad_bits_min {ngbs[0]} '
         f'--num_grad_bits_max {ngbs[-1]} --num_cyclic_period {n} --report_to wandb '
-        f'--run_name {full_exp_name} ' 
+        f'--run_name {full_exp_name} --seed {t} ' 
     )
     os.system(command)
