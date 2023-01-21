@@ -3,7 +3,7 @@ import os
 # setup
 gpu = 0
 workers = 4
-use_wandb = True
+use_wandb = False
 tags = 'voc_baseline'
 save_model = False
 eval_len = 5
