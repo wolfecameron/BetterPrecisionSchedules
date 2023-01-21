@@ -2,9 +2,9 @@ import argparse
 
 import torch
 
-from vanilla_models import (
+from vanilla_model import (
     resnet18,
-    resnet34,
+    resnet101,
 )
 from fvcore.nn import FlopCountAnalysis
 from quant_scheds import (
@@ -95,25 +95,25 @@ def compute_flops(flops, schedule):
         total_flops += flops * (fw_eflop + bw_eflop)
     return total_flops
 
-arch = 'resnet18'
-num_iter = 5005 * 90
+arch = 'resnet101'
+num_iter = 1430 * 120
 num_cycle = 8
 cycle_len = (num_iter // num_cycle)
 
-#prec_scheds = ['linear_growth', 'linear_decay', 'cos_growth', 'cos_decay', 'demon_growth', 'demon_decay', 'exp_growth', 'exp_decay']
-#num_bit_list = ['4 6', '4 8']
-#num_grad_bit_list = ['6 6', '8 8']
-flips = [True, False]
-prec_scheds = ['fixed']
-num_bit_list = ['6 6', '8 8']
+prec_scheds = ['linear_growth', 'linear_decay', 'cos_growth', 'cos_decay', 'demon_growth', 'demon_decay', 'exp_growth', 'exp_decay']
+num_bit_list = ['5 6', '5 8']
 num_grad_bit_list = ['6 6', '8 8']
+flips = [True, False]
+# prec_scheds = ['fixed']
+# num_bit_list = ['6 6', '8 8']
+# num_grad_bit_list = ['6 6', '8 8']
 
 
 
 if arch == 'resnet18':
-    model = resnet18()
-elif arch == 'resnet34':
-    model = resnet34()
+    model = resnet18(num_classes=20)
+elif arch == 'resnet101':
+    model = resnet101(num_classes=20)
 else:
     raise NotImplementedError()
 

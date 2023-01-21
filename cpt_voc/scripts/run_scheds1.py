@@ -13,22 +13,22 @@ csv_train = '/home/exx/data/VOCdevkit/VOC2012/CSVFormat/train.csv'
 csv_classes = '/home/exx/data/VOCdevkit/VOC2012/CSVFormat/class_map.csv'
 csv_val = '/home/exx/data/VOCdevkit/VOC2012/CSVFormat/val.csv'
 trials = 2
-save_name = './results/voc_sched_00.json'
+save_name = './results/voc_sched_rn18_6bit_01.json'
 tmp_fn = 'voc_sched_00.txt'
 
 # hparams
 depth = 18
 epochs = 120
 batch_size = 8
-lr = 1e-5
+lr = 3e-6
 use_lr_decay = False
 
 # cpt params
 n = 8
 qscheds = [
-    'demon_decay', 'demon_growth',
-    'exp_decay', 'exp_growth',
-    'linear_decay', 'linear_growth',
+    # 'demon_decay', 'demon_growth',
+    # 'exp_decay', 'exp_growth',
+    # 'linear_decay', 'linear_growth',
     'cos_decay', 'cos_growth'
 ]
 nbs_list = ['5 6']

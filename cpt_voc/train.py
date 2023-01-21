@@ -180,6 +180,7 @@ def main(args=None):
             # update the precision according to CPT schedule
             _citer = epoch_num * len(dataloader_train) + iter_num
             cyclic_adjust_precision(parser, _citer, cyclic_period)
+        
 
             optimizer.zero_grad()
             classification_loss, regression_loss = retinanet(
@@ -203,6 +204,7 @@ def main(args=None):
                 print(f'\rEpoch: {epoch_num} | Iteration: {iter_num} / {len(dataloader_train)} | Loss: {float(np.mean(loss_hist)):.2f}', end='')
             del classification_loss
             del regression_loss
+
         print('') # add newline for terminal output after making it through an epoch
         
         if (epoch_num % parser.eval_len) == 0 or (epoch_num == parser.epochs - 1):
