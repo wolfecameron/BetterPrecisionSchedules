@@ -27,7 +27,7 @@ n = 2
 exp_name = f'xnli_ft_{nbs[0]}bits'
 for t in range(trials):
     full_exp_name = f'{exp_name}_{t}'
-    output_dir = f'/data/crw13_data/xnli_results/{full_exp_name}'
+    output_dir = f'./xnli_results/{full_exp_name}'
     command = (
         f'CUDA_VISIBLE_DEVICES={gpu} python train_xnli.py --language {lang} '
         f'--train_language {train_lang} --model_name_or_path {model} --do_train '

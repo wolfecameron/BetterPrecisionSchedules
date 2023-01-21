@@ -308,12 +308,7 @@ def main():
     # Load pretrained model and tokenizer
     # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
-    print(model_args.config_name)
-    print(num_labels)
-    print(model_args.cache_dir)
-    print(model_args.model_revision)
-    print(model_args.use_auth_token)
-    input()
+
     config = AutoConfig.from_pretrained(
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         num_labels=num_labels,
@@ -330,7 +325,7 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
-
+    
     # we need to replace this with a quantized model
     tmp_model = AutoModelForSequenceClassification.from_pretrained(
         model_args.model_name_or_path,
