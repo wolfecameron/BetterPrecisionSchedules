@@ -34,7 +34,7 @@ for ps in qscheds:
         # run vertical flip trials
         exp_name = f'xnli_ft_{ps}_{nbs[-1]}bits_vertical'
         for t in range(trials):
-            full_exp_name = f'{exp_name}_{t}'
+            full_exp_name = f'{exp_name}_XX_{t}'
             output_dir = f'/data/crw13_data/xnli_results/{full_exp_name}'
             command = (
                 f'CUDA_VISIBLE_DEVICES={gpu} python train_xnli.py --language {lang} '
@@ -44,7 +44,7 @@ for ps in qscheds:
                 f'--output_dir {output_dir} --overwrite_output_dir --precision_schedule {ps} '
                 f'--num_bits_min {nbs[0]} --num_bits_max {nbs[-1]} --num_grad_bits_min {ngbs[0]} '
                 f'--num_grad_bits_max {ngbs[-1]} --num_cyclic_period {n} --report_to wandb '
-                f'--run_name {full_exp_name} --seed {t} --flip_vertically True ' 
+                f'--run_name {full_exp_name} --seed {t + 5} --flip_vertically True ' 
             )
             os.system(command)
 
@@ -52,7 +52,7 @@ for ps in qscheds:
         # run horizontal flip trials
         exp_name = f'xnli_ft_{ps}_{nbs[-1]}bits_horizontal'
         for t in range(trials):
-            full_exp_name = f'{exp_name}_{t}'
+            full_exp_name = f'{exp_name}_XX_{t}'
             output_dir = f'/data/crw13_data/xnli_results/{full_exp_name}'
             command = (
                 f'CUDA_VISIBLE_DEVICES={gpu} python train_xnli.py --language {lang} '
@@ -62,14 +62,14 @@ for ps in qscheds:
                 f'--output_dir {output_dir} --overwrite_output_dir --precision_schedule {ps} '
                 f'--num_bits_min {nbs[0]} --num_bits_max {nbs[-1]} --num_grad_bits_min {ngbs[0]} '
                 f'--num_grad_bits_max {ngbs[-1]} --num_cyclic_period {n} --report_to wandb '
-                f'--run_name {full_exp_name} --seed {t} --flip_vertically False ' 
+                f'--run_name {full_exp_name} --seed {t + 5} --flip_vertically False ' 
             )
             os.system(command)
 
     else:
         exp_name = f'xnli_ft_{ps}_{nbs[-1]}bits'
         for t in range(trials):
-            full_exp_name = f'{exp_name}_{t}'
+            full_exp_name = f'{exp_name}_XX_{t}'
             output_dir = f'/data/crw13_data/xnli_results/{full_exp_name}'
             command = (
                 f'CUDA_VISIBLE_DEVICES={gpu} python train_xnli.py --language {lang} '
@@ -79,6 +79,6 @@ for ps in qscheds:
                 f'--output_dir {output_dir} --overwrite_output_dir --precision_schedule {ps} '
                 f'--num_bits_min {nbs[0]} --num_bits_max {nbs[-1]} --num_grad_bits_min {ngbs[0]} '
                 f'--num_grad_bits_max {ngbs[-1]} --num_cyclic_period {n} --report_to wandb '
-                f'--run_name {full_exp_name} --seed {t} ' 
+                f'--run_name {full_exp_name} --seed {t + 5} ' 
             )
             os.system(command)
